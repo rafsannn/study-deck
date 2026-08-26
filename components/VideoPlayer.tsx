@@ -29,7 +29,6 @@ import {
   ChevronUp,
   Layers,
   Tag,
-  SlidersHorizontal,
 } from 'lucide-react';
 import { PlaylistItem, VideoWatchProgress } from '@/types/playlist';
 import { parseDurationToSeconds } from '@/lib/utils';
@@ -367,23 +366,6 @@ interface VideoPlayerProps {
 const SPEED_PRESETS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 const PREDEFINED_TAGS = ['⭐ Important', '🔄 Review', '⚡ Hard', '✅ Easy', '💼 Interview Q', '📐 Formula'];
 
-export interface QualityOption {
-  label: string;
-  value: string;
-  badge?: string;
-  desc?: string;
-}
-
-const QUALITY_OPTIONS: QualityOption[] = [
-  { label: 'Auto', value: 'default', badge: 'Auto', desc: 'Automatic based on connection' },
-  { label: '1080p', value: 'hd1080', badge: 'FHD', desc: '1080p Full High Definition' },
-  { label: '720p', value: 'hd720', badge: 'HD', desc: '720p High Definition' },
-  { label: '480p', value: 'large', badge: 'SD', desc: '480p Standard Quality' },
-  { label: '360p', value: 'medium', badge: '360p', desc: '360p Medium Quality' },
-  { label: '240p', value: 'small', badge: '240p', desc: '240p Low Quality' },
-  { label: '144p', value: 'tiny', badge: '144p', desc: '144p Data Saver' },
-];
-
 export function VideoPlayer({
   video,
   currentIndex,
@@ -425,21 +407,6 @@ export function VideoPlayer({
     }
     return 1;
   });
-  const [playbackQuality, setPlaybackQuality] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('study_deck_playback_quality');
-        if (saved) return saved;
-      } catch {
-        // ignore
-      }
-    }
-    return 'default';
-  });
-  const [showQualityMenu, setShowQualityMenu] = useState<boolean>(false);
-  const qualityMenuRef = useRef<HTMLDivElement | null>(null);
-  const [qualityFeedback, setQualityFeedback] = useState<string | null>(null);
-  const [actualPlaybackQuality, setActualPlaybackQuality] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [overlayFeedback, setOverlayFeedback] = useState<'play' | 'pause' | null>(null);
   const [newTagInput, setNewTagInput] = useState<string>('');
@@ -450,19 +417,6 @@ export function VideoPlayer({
   const cursorTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isDark = theme === 'dark';
-
-  // Close Quality Menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (qualityMenuRef.current && !qualityMenuRef.current.contains(e.target as Node)) {
-        setShowQualityMenu(false);
-      }
-    };
-    if (showQualityMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showQualityMenu]);
 
   // Safe PostMessage dispatcher to the YouTube iframe
   const sendIframeCommand = useCallback(
@@ -509,7 +463,7 @@ export function VideoPlayer({
     (rate: number) => {
       setPlaybackRate(rate);
       try {
-        localStorage.setItem('study_deck_playback_speed', String(rate));
+        localStorage.setItem('rafsan_study_deck_playback_speed', String(rate));
       } catch {
         // ignore
       }
@@ -518,49 +472,7 @@ export function VideoPlayer({
     [sendIframeCommand]
   );
 
-  const handleSetPlaybackQuality = useCallback(
-    (quality: string) => {
-      if (!video?.videoId) return;
-      setPlaybackQuality(quality);
-      setShowQualityMenu(false);
-      try {
-        localStorage.setItem('study_deck_playback_quality', quality);
-      } catch {
-        // ignore
-      }
-
-      const opt = QUALITY_OPTIONS.find((q) => q.value === quality);
-      setQualityFeedback(opt ? `Quality: ${opt.label}` : `Quality: ${quality}`);
-      setTimeout(() => {
-        setQualityFeedback(null);
-      }, 2200);
-
-      const currentTime = currentPlaybackTime || 0;
-
-      // 1. Send setPlaybackQuality & setPlaybackQualityRange
-      sendIframeCommand('setPlaybackQuality', [quality]);
-      sendIframeCommand('setPlaybackQualityRange', [quality, quality]);
-
-      // 2. Instruct YouTube's player buffer to immediately switch resolution at current timestamp
-      sendIframeCommand('loadVideoById', [{
-        videoId: video.videoId,
-        startSeconds: Math.floor(currentTime),
-        suggestedQuality: quality,
-      }]);
-
-      // 3. Fallback positional command signature
-      sendIframeCommand('cueVideoById', [video.videoId, Math.floor(currentTime), quality]);
-      sendIframeCommand('playVideo', []);
-
-      // 4. Re-apply playback speed
-      setTimeout(() => {
-        sendIframeCommand('setPlaybackRate', [playbackRate]);
-      }, 250);
-    },
-    [sendIframeCommand, video, currentPlaybackTime, playbackRate]
-  );
-
-  // Automatically start playback at saved timestamp once per video mount or speed/quality change
+  // Automatically start playback at saved timestamp once per video mount or speed change
   useEffect(() => {
     if (!video?.videoId) return;
 
@@ -569,10 +481,6 @@ export function VideoPlayer({
     const startPlaybackAndSpeed = () => {
       sendIframeCommand('listening', []);
       sendIframeCommand('setPlaybackRate', [playbackRate]);
-      if (playbackQuality) {
-        sendIframeCommand('setPlaybackQuality', [playbackQuality]);
-        sendIframeCommand('setPlaybackQualityRange', [playbackQuality, playbackQuality]);
-      }
       if (targetStart > 2 && !initialSeekDoneRef.current) {
         sendIframeCommand('seekTo', [targetStart, true]);
       }
@@ -585,7 +493,7 @@ export function VideoPlayer({
     return () => {
       clearTimeout(t1);
     };
-  }, [video?.videoId, playbackRate, playbackQuality, sendIframeCommand, startSecondsMap]);
+  }, [video?.videoId, playbackRate, sendIframeCommand, startSecondsMap]);
 
   const handleToggleMute = useCallback(() => {
     if (isMuted) {
@@ -784,10 +692,6 @@ export function VideoPlayer({
                 lastWatchedAt: new Date().toISOString(),
               });
             }
-          }
-
-          if (typeof data.info.playbackQuality === 'string' && data.info.playbackQuality) {
-            setActualPlaybackQuality(data.info.playbackQuality);
           }
 
           if (playerState === 1) {
@@ -1093,8 +997,7 @@ export function VideoPlayer({
 
   const startSec = video?.videoId ? (startSecondsMap[video.videoId] ?? 0) : 0;
   const startParam = startSec > 2 ? `&start=${startSec}` : '';
-  const vqParam = playbackQuality && playbackQuality !== 'default' ? `&vq=${playbackQuality}` : '';
-  const embedUrl = `https://www.youtube.com/embed/${video.videoId}?enablejsapi=1&autoplay=1&controls=0&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0${startParam}${vqParam}`;
+  const embedUrl = `https://www.youtube.com/embed/${video.videoId}?enablejsapi=1&autoplay=1&controls=0&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0${startParam}`;
 
   return (
     <div className="flex flex-col gap-5">
@@ -1113,16 +1016,12 @@ export function VideoPlayer({
       >
         <iframe
           id={`yt-player-${video.videoId}`}
-          key={`${video.videoId}-${playbackQuality}`}
+          key={video.videoId}
           src={embedUrl}
           title={video.title}
           onLoad={() => {
             sendIframeCommand('listening', []);
             sendIframeCommand('setPlaybackRate', [playbackRate]);
-            if (playbackQuality) {
-              sendIframeCommand('setPlaybackQuality', [playbackQuality]);
-              sendIframeCommand('setPlaybackQualityRange', [playbackQuality, playbackQuality]);
-            }
             if (startSec > 2) {
               sendIframeCommand('seekTo', [startSec, true]);
             }
@@ -1150,14 +1049,6 @@ export function VideoPlayer({
               ) : (
                 <Pause className="w-10 h-10 fill-white" />
               )}
-            </div>
-          )}
-
-          {/* Animated Quality Feedback Badge */}
-          {qualityFeedback && (
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-black/80 backdrop-blur-md text-white shadow-2xl border border-indigo-500/40 text-xs font-mono font-medium flex items-center gap-2 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{qualityFeedback}</span>
             </div>
           )}
         </div>
@@ -1234,131 +1125,54 @@ export function VideoPlayer({
             </button>
           </div>
 
-            {/* Right Controls: Speed Presets, Quality, Theater, Fullscreen */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Speed Presets */}
-              <div className="flex items-center gap-1 font-mono">
-                {SPEED_PRESETS.map((preset) => {
-                  const isCurrent = playbackRate === preset;
-                  return (
-                    <button
-                      key={preset}
-                      onClick={() => handleSetPlaybackRate(preset)}
-                      className={`px-2 py-1 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
-                        isCurrent
-                          ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
-                          : isDark
-                          ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-                          : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950'
-                      }`}
-                      title={`Speed ${preset}x ([ or ])`}
-                    >
-                      {preset}x
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Video Playback Quality Dropdown */}
-              <div className="relative" ref={qualityMenuRef}>
-                <button
-                  onClick={() => setShowQualityMenu(!showQualityMenu)}
-                  className={`px-2 py-1 rounded-xl border text-xs font-semibold inline-flex items-center gap-1 transition-all cursor-pointer select-none ${
-                    showQualityMenu || playbackQuality !== 'default'
-                      ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
-                      : isDark
-                      ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
-                      : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950'
-                  }`}
-                  title="Change Video Playback Quality (1080p, 720p, 480p, Auto...)"
-                >
-                  <SlidersHorizontal className="w-3 h-3 text-indigo-400 group-hover:text-white" />
-                  <span className="font-mono">
-                    {QUALITY_OPTIONS.find((q) => q.value === playbackQuality)?.label || 'Quality'}
-                  </span>
-                  <ChevronDown
-                    className={`w-2.5 h-2.5 transition-transform duration-200 ${
-                      showQualityMenu ? 'rotate-180' : ''
+          {/* Right Controls: Speed Presets, Theater, Fullscreen */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1 font-mono">
+              {SPEED_PRESETS.map((preset) => {
+                const isCurrent = playbackRate === preset;
+                return (
+                  <button
+                    key={preset}
+                    onClick={() => handleSetPlaybackRate(preset)}
+                    className={`px-2 py-1 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
+                        : isDark
+                        ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                        : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950'
                     }`}
-                  />
-                </button>
-
-                {showQualityMenu && (
-                  <div
-                    className={`absolute right-0 bottom-full mb-2 w-48 rounded-xl border shadow-2xl z-50 p-1.5 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 ${
-                      isDark
-                        ? 'bg-[#121216]/95 border-zinc-800 text-zinc-200'
-                        : 'bg-white/95 border-zinc-200 text-zinc-800 shadow-xl'
-                    }`}
+                    title={`Speed ${preset}x ([ or ])`}
                   >
-                    <div className="px-2 py-1 mb-1 text-[10px] font-mono uppercase tracking-wider text-zinc-500 font-bold border-b border-zinc-800/40 flex items-center justify-between">
-                      <span>Video Quality</span>
-                      <Sparkles className="w-3 h-3 text-indigo-400" />
-                    </div>
-                    <div className="space-y-0.5 max-h-56 overflow-y-auto">
-                      {QUALITY_OPTIONS.map((opt) => {
-                        const isSelected = playbackQuality === opt.value;
-                        return (
-                          <button
-                            key={opt.value}
-                            onClick={() => handleSetPlaybackQuality(opt.value)}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
-                              isSelected
-                                ? 'bg-indigo-600 text-white font-semibold shadow-xs'
-                                : isDark
-                                ? 'hover:bg-zinc-800/80 text-zinc-300'
-                                : 'hover:bg-zinc-100 text-zinc-700'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono">{opt.label}</span>
-                              {opt.badge && opt.badge !== 'Auto' && (
-                                <span
-                                  className={`text-[9px] px-1 py-0.2 rounded font-mono font-bold ${
-                                    isSelected
-                                      ? 'bg-white/20 text-white'
-                                      : isDark
-                                      ? 'bg-zinc-800 text-zinc-400'
-                                      : 'bg-zinc-200 text-zinc-600'
-                                  }`}
-                                >
-                                  {opt.badge}
-                                </span>
-                              )}
-                            </div>
-                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={() => setTheaterMode(!theaterMode)}
-                className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
-                  theaterMode
-                    ? 'bg-indigo-600 border-indigo-500 text-white'
-                    : isDark
-                    ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400'
-                    : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
-                }`}
-                title="Toggle Theater Mode"
-              >
-                <Tv className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                onClick={handleToggleFullscreen}
-                className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
-                  isDark ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300' : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
-                }`}
-                title="Toggle Fullscreen (F)"
-              >
-                <Maximize2 className="w-3.5 h-3.5" />
-              </button>
+                    {preset}x
+                  </button>
+                );
+              })}
             </div>
+
+            <button
+              onClick={() => setTheaterMode(!theaterMode)}
+              className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+                theaterMode
+                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                  : isDark
+                  ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400'
+                  : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+              }`}
+              title="Toggle Theater Mode"
+            >
+              <Tv className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              onClick={handleToggleFullscreen}
+              className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+                isDark ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300' : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+              }`}
+              title="Toggle Fullscreen (F)"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1814,7 +1628,7 @@ export function VideoPlayer({
           </div>
         </div>
 
-        {/* Code & Key Takeaways Scratchpad */}
+        {/* Rafsan's Code & Key Takeaways Scratchpad */}
         {showNotes && (
           <VideoNotesEditor
             key={video.videoId}
