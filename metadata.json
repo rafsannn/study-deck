@@ -1,0 +1,6 @@
+{
+  "name": "Study Deck",
+  "description": "YouTube playlist progress tracker and study deck with video bookmarks, streak tracking, and course progress.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
