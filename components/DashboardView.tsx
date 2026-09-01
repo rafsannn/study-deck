@@ -23,13 +23,11 @@ import {
   Hourglass,
   Target,
   Calendar,
-  Compass,
   TrendingUp,
 } from 'lucide-react';
 import { PlaylistCourse, UserStudyData, WeeklyStudyGoal } from '@/types/playlist';
 import { calculateCourseDurations, formatDurationHuman, formatTime } from '@/lib/utils';
 import { StudyHeatmap } from '@/components/StudyHeatmap';
-import { LearningRoadmaps } from '@/components/LearningRoadmaps';
 
 interface DashboardViewProps {
   studyData: UserStudyData;
@@ -42,12 +40,10 @@ interface DashboardViewProps {
   onResetCourseProgress: (courseId: string) => void;
   onUpdateWeeklyGoal?: (goal: WeeklyStudyGoal) => void;
   onLogStudySession?: (date: string, minutes: number, topics: number) => void;
-  onToggleEnrollRoadmap?: (roadmapId: string) => void;
-  onToggleMilestoneComplete?: (milestoneId: string) => void;
   theme?: 'dark' | 'light';
 }
 
-type DashboardTab = 'overview' | 'playlists' | 'heatmap' | 'roadmaps';
+type DashboardTab = 'overview' | 'playlists' | 'heatmap';
 
 export function DashboardView({
   studyData,
@@ -60,8 +56,6 @@ export function DashboardView({
   onResetCourseProgress,
   onUpdateWeeklyGoal,
   onLogStudySession,
-  onToggleEnrollRoadmap,
-  onToggleMilestoneComplete,
   theme = 'dark',
 }: DashboardViewProps) {
   const isDark = theme === 'dark';
@@ -347,20 +341,6 @@ export function DashboardView({
             <Calendar className="w-3.5 h-3.5" />
             <span>Weekly Heatmap</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab('roadmaps')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'roadmaps'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : isDark
-                ? 'text-zinc-400 hover:text-zinc-200'
-                : 'text-zinc-600 hover:text-zinc-900'
-            }`}
-          >
-            <Compass className="w-3.5 h-3.5" />
-            <span>Learning Roadmaps</span>
-          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -483,19 +463,6 @@ export function DashboardView({
           studyData={studyData}
           onUpdateWeeklyGoal={onUpdateWeeklyGoal}
           onLogStudySession={onLogStudySession}
-          theme={theme}
-        />
-      )}
-
-      {/* Curated Learning Roadmaps Component */}
-      {(activeTab === 'overview' || activeTab === 'roadmaps') && (
-        <LearningRoadmaps
-          studyData={studyData}
-          courses={courses}
-          onSelectCourse={(c) => onSelectCourse(c)}
-          onOpenImportModal={onOpenImportModal}
-          onToggleEnrollRoadmap={onToggleEnrollRoadmap || (() => {})}
-          onToggleMilestoneComplete={onToggleMilestoneComplete || (() => {})}
           theme={theme}
         />
       )}

@@ -36,14 +36,15 @@ const DEFAULT_INITIAL_STUDY_DATA: UserStudyData = {
     lastActiveDate: '',
   },
   customPlaylists: [],
+  studyGoal: {
+    dailyTopics: 2,
+    dailyMinutes: 45,
+  },
   weeklyGoal: {
     targetMinutes: 300,
     targetTopics: 10,
   },
   dailyActivity: {},
-  enrolledRoadmapIds: ['nextjs-mastery-2025'],
-  completedMilestoneIds: [],
-  customRoadmaps: [],
   lastUpdated: new Date().toISOString(),
 };
 
@@ -79,11 +80,9 @@ function getStoreSnapshot(): UserStudyData {
           videoTags: parsed.videoTags || {},
           streak: parsed.streak || { count: 0, lastActiveDate: '' },
           customPlaylists: parsed.customPlaylists || [],
+          studyGoal: parsed.studyGoal || DEFAULT_INITIAL_STUDY_DATA.studyGoal,
           weeklyGoal: parsed.weeklyGoal || DEFAULT_INITIAL_STUDY_DATA.weeklyGoal,
           dailyActivity: parsed.dailyActivity || {},
-          enrolledRoadmapIds: parsed.enrolledRoadmapIds || DEFAULT_INITIAL_STUDY_DATA.enrolledRoadmapIds,
-          completedMilestoneIds: parsed.completedMilestoneIds || [],
-          customRoadmaps: parsed.customRoadmaps || [],
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
         };
       } else {
@@ -846,66 +845,6 @@ export default function StudyDeckPage() {
     [studyData, persistData, updateStreakOnActivity, fireConfetti]
   );
 
-  // Action: Toggle enrollment in a curated roadmap
-  const handleToggleEnrollRoadmap = useCallback(
-    (roadmapId: string) => {
-      const current = studyData.enrolledRoadmapIds || [];
-      const isEnrolled = current.includes(roadmapId);
-      const updatedList = isEnrolled
-        ? current.filter((id) => id !== roadmapId)
-        : [...current, roadmapId];
-
-      const updated: UserStudyData = {
-        ...studyData,
-        enrolledRoadmapIds: updatedList,
-        lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
-    },
-    [studyData, persistData]
-  );
-
-  // Action: Toggle completion of a roadmap milestone
-  const handleToggleMilestoneComplete = useCallback(
-    (milestoneId: string) => {
-      const current = studyData.completedMilestoneIds || [];
-      const isCompleted = current.includes(milestoneId);
-      const updatedList = isCompleted
-        ? current.filter((id) => id !== milestoneId)
-        : [...current, milestoneId];
-
-      const todayStr = new Date().toISOString().slice(0, 10);
-      let updatedDaily = studyData.dailyActivity || {};
-
-      if (!isCompleted) {
-        // Milestone finished: add bonus activity and update streak!
-        const curToday = updatedDaily[todayStr] || { minutes: 0, topics: 0 };
-        updatedDaily = {
-          ...updatedDaily,
-          [todayStr]: {
-            minutes: curToday.minutes + 30,
-            topics: curToday.topics + 1,
-          },
-        };
-        fireConfetti();
-      }
-
-      const newStreak = !isCompleted
-        ? updateStreakOnActivity(studyData.streak || { count: 0, lastActiveDate: '' })
-        : studyData.streak;
-
-      const updated: UserStudyData = {
-        ...studyData,
-        completedMilestoneIds: updatedList,
-        dailyActivity: updatedDaily,
-        streak: newStreak,
-        lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
-    },
-    [studyData, persistData, updateStreakOnActivity, fireConfetti]
-  );
-
   // Action: Update daily target & study goal
   const handleUpdateStudyGoal = useCallback(
     (goal: StudyGoal) => {
@@ -965,8 +904,6 @@ export default function StudyDeckPage() {
             onResetCourseProgress={handleResetCourseProgress}
             onUpdateWeeklyGoal={handleUpdateWeeklyGoal}
             onLogStudySession={handleLogStudySession}
-            onToggleEnrollRoadmap={handleToggleEnrollRoadmap}
-            onToggleMilestoneComplete={handleToggleMilestoneComplete}
             theme={theme}
           />
         </main>
@@ -1073,6 +1010,7 @@ export default function StudyDeckPage() {
       />
 
       <TargetEstimatorModal
+        key={`target-modal-${studyData.studyGoal?.dailyTopics || 2}-${studyData.studyGoal?.dailyMinutes || 45}-${currentCourse?.id || 'all'}-${isTargetEstimatorOpen}`}
         isOpen={isTargetEstimatorOpen}
         onClose={() => setIsTargetEstimatorOpen(false)}
         courses={allCourses}

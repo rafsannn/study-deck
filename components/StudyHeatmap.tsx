@@ -70,7 +70,7 @@ export function StudyHeatmap({
       map[studyData.streak.lastActiveDate] = {
         minutes: 25,
         seconds: 1500,
-        topics: 1,
+        topics: 0,
       };
     }
 
@@ -84,7 +84,7 @@ export function StudyHeatmap({
             map[d] = {
               minutes: currentMins,
               seconds: p.currentTime,
-              topics: p.percent >= 90 ? 1 : 0,
+              topics: 0, // Topic completions strictly come from dailyActivity, not watch progress
             };
           } else {
             // Keep the maximum of recorded activity minutes or watched progress minutes for that date
@@ -101,7 +101,7 @@ export function StudyHeatmap({
     return map;
   }, [studyData.dailyActivity, studyData.streak, studyData.videoProgress]);
 
-  // Compute 20 weeks of history (140 days) ending on the current week Saturday
+  // Compute 52 weeks of history (364 days / 1 full year) ending on the current week Saturday
   const { weeks, totalMinutesPastYear, activeDaysCount, maxDailyMinutes } = useMemo(() => {
     const today = new Date();
     // End on upcoming or current Saturday
@@ -111,7 +111,7 @@ export function StudyHeatmap({
     const endDate = new Date(today);
     endDate.setDate(today.getDate() + daysUntilSaturday);
 
-    const totalWeeks = 20; // 20 weeks of rich GitHub-style matrix
+    const totalWeeks = 52; // 52 weeks of rich GitHub-style 1-year matrix
     const totalDays = totalWeeks * 7;
 
     const startDate = new Date(endDate);
@@ -224,12 +224,16 @@ export function StudyHeatmap({
   const monthLabels = useMemo(() => {
     const labels: { index: number; text: string }[] = [];
     let lastMonth = '';
+    let lastIndex = -10;
 
     weeks.forEach((week, index) => {
       const firstDayOfMonth = week.find((day) => day.dateObj.getDate() <= 7);
       if (firstDayOfMonth && firstDayOfMonth.monthName !== lastMonth) {
-        labels.push({ index, text: firstDayOfMonth.monthName });
-        lastMonth = firstDayOfMonth.monthName;
+        if (index - lastIndex >= 3) {
+          labels.push({ index, text: firstDayOfMonth.monthName });
+          lastMonth = firstDayOfMonth.monthName;
+          lastIndex = index;
+        }
       }
     });
 
@@ -521,7 +525,7 @@ export function StudyHeatmap({
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs text-zinc-400">
           <span className="font-semibold uppercase tracking-wider text-[11px]">
-            Activity Matrix (Past 20 Weeks)
+            Activity Matrix (Past 52 Weeks • 1 Year)
           </span>
           <span className="font-mono text-[11px]">
             {activeDaysCount} active days • {formatDurationHuman(totalMinutesPastYear * 60)} logged
@@ -529,92 +533,157 @@ export function StudyHeatmap({
         </div>
 
         <div
-          className={`p-4 rounded-2xl border overflow-x-auto ${
+          className={`p-4 sm:p-5 rounded-2xl border ${
             isDark ? 'bg-zinc-950/60 border-zinc-800/80' : 'bg-zinc-50/80 border-zinc-200'
           }`}
         >
-          <div className="min-w-[640px]">
-            {/* Months Header */}
-            <div className="flex text-[10px] font-mono text-zinc-500 mb-1.5 pl-6">
-              {weeks.map((week, wIdx) => {
-                const firstDay = week[0];
-                const matchingMonth = monthLabels.find((m) => m.index === wIdx);
+          {/* Responsive SVG Contribution Graph that expands to fill available container space */}
+          <div className="w-full">
+            <svg
+              viewBox="0 0 812 131"
+              className="w-full h-auto max-w-full select-none overflow-visible"
+              aria-label="Activity Contribution Graph"
+            >
+              {/* Month Labels aligned to exact week index x-coordinates */}
+              {monthLabels.map((m) => {
+                const step = 15; // 11.5 cellSize + 3.5 gap
+                const leftMargin = 28;
+                const x = leftMargin + m.index * step;
                 return (
-                  <div key={wIdx} className="w-3.5 sm:w-4 mr-1 text-left shrink-0">
-                    {matchingMonth ? matchingMonth.text : ''}
-                  </div>
+                  <text
+                    key={`${m.index}-${m.text}`}
+                    x={x}
+                    y={13}
+                    fill={isDark ? '#71717a' : '#71717a'}
+                    fontSize="9.5"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                    fontWeight="500"
+                  >
+                    {m.text}
+                  </text>
                 );
               })}
-            </div>
 
-            {/* Grid with Day of Week Rows (Sun to Sat) */}
-            <div className="flex">
               {/* Day Labels on Left */}
-              <div className="flex flex-col justify-between text-[9px] font-mono text-zinc-500 pr-2 select-none h-[116px]">
-                <span className="h-3 leading-3">Sun</span>
-                <span className="h-3 leading-3">Tue</span>
-                <span className="h-3 leading-3">Thu</span>
-                <span className="h-3 leading-3">Sat</span>
-              </div>
+              <text
+                x="0"
+                y={20 + 0 * 15 + 9}
+                fill={isDark ? '#52525b' : '#71717a'}
+                fontSize="8.5"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+              >
+                Sun
+              </text>
+              <text
+                x="0"
+                y={20 + 2 * 15 + 9}
+                fill={isDark ? '#52525b' : '#71717a'}
+                fontSize="8.5"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+              >
+                Tue
+              </text>
+              <text
+                x="0"
+                y={20 + 4 * 15 + 9}
+                fill={isDark ? '#52525b' : '#71717a'}
+                fontSize="8.5"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+              >
+                Thu
+              </text>
+              <text
+                x="0"
+                y={20 + 6 * 15 + 9}
+                fill={isDark ? '#52525b' : '#71717a'}
+                fontSize="8.5"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+              >
+                Sat
+              </text>
 
-              {/* Matrix Columns (Weeks) */}
-              <div className="flex gap-1">
-                {weeks.map((week, wIdx) => (
-                  <div key={wIdx} className="flex flex-col gap-1 shrink-0">
-                    {week.map((day) => {
+              {/* 52-Week Matrix of Day Rectangles */}
+              {weeks.map((week, wIdx) => {
+                const step = 15;
+                const leftMargin = 28;
+                const topMargin = 20;
+                const cellSize = 11.5;
+                const colX = leftMargin + wIdx * step;
+
+                return (
+                  <g key={wIdx}>
+                    {week.map((day, dIdx) => {
+                      const rowY = topMargin + dIdx * step;
                       const isToday =
                         day.dateStr === new Date().toISOString().slice(0, 10);
 
-                      // Determine square background based on intensity
-                      let bgClass = isDark
-                        ? 'bg-zinc-900 border border-zinc-800/60'
-                        : 'bg-zinc-200/80 border border-zinc-300/40';
+                      // Determine colors based on intensity
+                      let fill = isDark ? '#18181b' : '#e4e4e7';
+                      let stroke = isDark ? '#27272a' : '#d4d4d8';
 
                       if (day.intensityLevel === 1) {
-                        bgClass = isDark
-                          ? 'bg-emerald-950 border border-emerald-800/60 text-emerald-300'
-                          : 'bg-emerald-200 border border-emerald-300 text-emerald-800';
+                        fill = isDark ? '#064e3b' : '#a7f3d0';
+                        stroke = isDark ? '#065f46' : '#6ee7b7';
                       } else if (day.intensityLevel === 2) {
-                        bgClass = isDark
-                          ? 'bg-emerald-800 border border-emerald-700 text-emerald-200'
-                          : 'bg-emerald-400 border border-emerald-500 text-white';
+                        fill = isDark ? '#047857' : '#34d399';
+                        stroke = isDark ? '#059669' : '#10b981';
                       } else if (day.intensityLevel === 3) {
-                        bgClass = isDark
-                          ? 'bg-emerald-600 border border-emerald-500 text-white'
-                          : 'bg-emerald-500 border border-emerald-600 text-white';
+                        fill = isDark ? '#059669' : '#059669';
+                        stroke = isDark ? '#10b981' : '#047857';
                       } else if (day.intensityLevel === 4) {
-                        bgClass = isDark
-                          ? 'bg-emerald-400 border border-emerald-300 shadow-xs shadow-emerald-400/30 text-emerald-950'
-                          : 'bg-emerald-600 border border-emerald-700 text-white';
+                        fill = isDark ? '#34d399' : '#047857';
+                        stroke = isDark ? '#6ee7b7' : '#064e3b';
                       }
 
                       return (
-                        <div
-                          key={day.dateStr}
-                          onMouseEnter={(e) => {
-                            setHoveredCell(day);
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setTooltipPos({
-                              x: rect.left + rect.width / 2,
-                              y: rect.top - 8,
-                            });
-                          }}
-                          onMouseLeave={() => {
-                            setHoveredCell(null);
-                            setTooltipPos(null);
-                          }}
-                          className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-[4px] cursor-pointer transition-transform hover:scale-125 relative ${bgClass} ${
-                            isToday ? 'ring-2 ring-indigo-500' : ''
-                          }`}
-                        />
+                        <g key={day.dateStr}>
+                          {isToday && (
+                            <rect
+                              x={colX - 1.2}
+                              y={rowY - 1.2}
+                              width={cellSize + 2.4}
+                              height={cellSize + 2.4}
+                              rx={3.2}
+                              ry={3.2}
+                              fill="none"
+                              stroke={isDark ? '#818cf8' : '#6366f1'}
+                              strokeWidth={1.5}
+                            />
+                          )}
+                          <rect
+                            x={colX}
+                            y={rowY}
+                            width={cellSize}
+                            height={cellSize}
+                            rx={2.5}
+                            ry={2.5}
+                            fill={fill}
+                            stroke={stroke}
+                            strokeWidth={0.8}
+                            className="cursor-pointer transition-opacity hover:opacity-80"
+                            onMouseEnter={(e) => {
+                              setHoveredCell(day);
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setTooltipPos({
+                                x: rect.left + rect.width / 2,
+                                y: rect.top - 8,
+                              });
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredCell(null);
+                              setTooltipPos(null);
+                            }}
+                          />
+                        </g>
                       );
                     })}
-                  </div>
-                ))}
-              </div>
-            </div>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
 
-            {/* Matrix Legend */}
+          {/* Matrix Legend */}
             <div className="flex items-center justify-between pt-3 mt-3 border-t border-zinc-800/40 text-[10px] text-zinc-500 font-mono">
               <div className="flex items-center gap-2">
                 <span>Learn every day to maintain streak</span>
@@ -652,7 +721,6 @@ export function StudyHeatmap({
             </div>
           </div>
         </div>
-      </div>
 
       {/* Floating Hover Tooltip */}
       {hoveredCell && tooltipPos && (
