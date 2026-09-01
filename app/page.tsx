@@ -11,7 +11,14 @@ import { StatsModal } from '@/components/StatsModal';
 import { DashboardView } from '@/components/DashboardView';
 import { TargetEstimatorModal } from '@/components/TargetEstimatorModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
-import { PlaylistCourse, PlaylistItem, StudyGoal, UserStudyData, VideoWatchProgress } from '@/types/playlist';
+import {
+  PlaylistCourse,
+  PlaylistItem,
+  StudyGoal,
+  WeeklyStudyGoal,
+  UserStudyData,
+  VideoWatchProgress,
+} from '@/types/playlist';
 import { parseDurationToSeconds } from '@/lib/utils';
 
 const STORAGE_KEY = 'rafsan_study_deck_data_v2';
@@ -29,6 +36,14 @@ const DEFAULT_INITIAL_STUDY_DATA: UserStudyData = {
     lastActiveDate: '',
   },
   customPlaylists: [],
+  weeklyGoal: {
+    targetMinutes: 300,
+    targetTopics: 10,
+  },
+  dailyActivity: {},
+  enrolledRoadmapIds: ['nextjs-mastery-2025'],
+  completedMilestoneIds: [],
+  customRoadmaps: [],
   lastUpdated: new Date().toISOString(),
 };
 
@@ -61,8 +76,14 @@ function getStoreSnapshot(): UserStudyData {
           completedVideos: parsed.completedVideos || {},
           videoNotes: parsed.videoNotes || {},
           videoProgress: parsed.videoProgress || {},
+          videoTags: parsed.videoTags || {},
           streak: parsed.streak || { count: 0, lastActiveDate: '' },
           customPlaylists: parsed.customPlaylists || [],
+          weeklyGoal: parsed.weeklyGoal || DEFAULT_INITIAL_STUDY_DATA.weeklyGoal,
+          dailyActivity: parsed.dailyActivity || {},
+          enrolledRoadmapIds: parsed.enrolledRoadmapIds || DEFAULT_INITIAL_STUDY_DATA.enrolledRoadmapIds,
+          completedMilestoneIds: parsed.completedMilestoneIds || [],
+          customRoadmaps: parsed.customRoadmaps || [],
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
         };
       } else {
@@ -436,6 +457,43 @@ export default function StudyDeckPage() {
     [studyData, persistData]
   );
 
+  // Action: Live playback study time logging (tracks exact seconds/minutes watched, even for unfinished videos)
+  const handleStudyTimeLogged = useCallback(
+    (secondsDelta: number, _videoId: string) => {
+      if (secondsDelta <= 0) return;
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const existingDaily = studyData.dailyActivity || {};
+      const curToday = existingDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+
+      const curSecs = curToday.seconds ?? (curToday.minutes || 0) * 60;
+      const newSecs = curSecs + secondsDelta;
+      const newMins = Math.max(1, Math.round(newSecs / 60));
+
+      const updatedDaily = {
+        ...existingDaily,
+        [todayStr]: {
+          ...curToday,
+          seconds: newSecs,
+          minutes: newMins,
+        },
+      };
+
+      const newStreak = updateStreakOnActivity(
+        studyData.streak || { count: 0, lastActiveDate: '' }
+      );
+
+      const updated: UserStudyData = {
+        ...studyData,
+        dailyActivity: updatedDaily,
+        streak: newStreak,
+        lastUpdated: new Date().toISOString(),
+      };
+      persistData(updated);
+    },
+    [studyData, persistData, updateStreakOnActivity]
+  );
+
   // Action: Toggle completion status for a video
   const handleToggleComplete = useCallback(
     (videoId: string) => {
@@ -451,12 +509,35 @@ export default function StudyDeckPage() {
         ? updateStreakOnActivity(studyData.streak || { count: 0, lastActiveDate: '' })
         : studyData.streak;
 
+      const todayStr = new Date().toISOString().slice(0, 10);
+      let updatedDaily = studyData.dailyActivity || {};
+      const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+
+      if (!alreadyDone) {
+        updatedDaily = {
+          ...updatedDaily,
+          [todayStr]: {
+            ...curToday,
+            topics: (curToday.topics || 0) + 1,
+          },
+        };
+      } else {
+        updatedDaily = {
+          ...updatedDaily,
+          [todayStr]: {
+            ...curToday,
+            topics: Math.max(0, (curToday.topics || 1) - 1),
+          },
+        };
+      }
+
       const updated: UserStudyData = {
         ...studyData,
         completedVideos: {
           ...studyData.completedVideos,
           [currentCourse.id]: newList,
         },
+        dailyActivity: updatedDaily,
         streak: newStreak,
         lastUpdated: new Date().toISOString(),
       };
@@ -491,6 +572,20 @@ export default function StudyDeckPage() {
       ? updateStreakOnActivity(studyData.streak || { count: 0, lastActiveDate: '' })
       : studyData.streak;
 
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let updatedDaily = studyData.dailyActivity || {};
+    const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+
+    if (!isAlreadyDone) {
+      updatedDaily = {
+        ...updatedDaily,
+        [todayStr]: {
+          ...curToday,
+          topics: (curToday.topics || 0) + 1,
+        },
+      };
+    }
+
     const updated: UserStudyData = {
       ...studyData,
       activeVideoId: nextVideoId,
@@ -498,6 +593,7 @@ export default function StudyDeckPage() {
         ...studyData.completedVideos,
         [currentCourse.id]: updatedList,
       },
+      dailyActivity: updatedDaily,
       streak: newStreak,
       lastUpdated: new Date().toISOString(),
     };
@@ -709,6 +805,107 @@ export default function StudyDeckPage() {
     [studyData, persistData]
   );
 
+  // Action: Update weekly study goal
+  const handleUpdateWeeklyGoal = useCallback(
+    (goal: WeeklyStudyGoal) => {
+      const updated: UserStudyData = {
+        ...studyData,
+        weeklyGoal: goal,
+        lastUpdated: new Date().toISOString(),
+      };
+      persistData(updated);
+    },
+    [studyData, persistData]
+  );
+
+  // Action: Log a manual or auto study session on a date
+  const handleLogStudySession = useCallback(
+    (date: string, minutes: number, topics: number) => {
+      const currentRec = studyData.dailyActivity?.[date] || { minutes: 0, topics: 0 };
+      const updatedRec = {
+        minutes: (currentRec.minutes || 0) + minutes,
+        topics: (currentRec.topics || 0) + topics,
+      };
+
+      const newStreak = updateStreakOnActivity(
+        studyData.streak || { count: 0, lastActiveDate: '' }
+      );
+
+      const updated: UserStudyData = {
+        ...studyData,
+        dailyActivity: {
+          ...(studyData.dailyActivity || {}),
+          [date]: updatedRec,
+        },
+        streak: newStreak,
+        lastUpdated: new Date().toISOString(),
+      };
+      persistData(updated);
+      fireConfetti();
+    },
+    [studyData, persistData, updateStreakOnActivity, fireConfetti]
+  );
+
+  // Action: Toggle enrollment in a curated roadmap
+  const handleToggleEnrollRoadmap = useCallback(
+    (roadmapId: string) => {
+      const current = studyData.enrolledRoadmapIds || [];
+      const isEnrolled = current.includes(roadmapId);
+      const updatedList = isEnrolled
+        ? current.filter((id) => id !== roadmapId)
+        : [...current, roadmapId];
+
+      const updated: UserStudyData = {
+        ...studyData,
+        enrolledRoadmapIds: updatedList,
+        lastUpdated: new Date().toISOString(),
+      };
+      persistData(updated);
+    },
+    [studyData, persistData]
+  );
+
+  // Action: Toggle completion of a roadmap milestone
+  const handleToggleMilestoneComplete = useCallback(
+    (milestoneId: string) => {
+      const current = studyData.completedMilestoneIds || [];
+      const isCompleted = current.includes(milestoneId);
+      const updatedList = isCompleted
+        ? current.filter((id) => id !== milestoneId)
+        : [...current, milestoneId];
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      let updatedDaily = studyData.dailyActivity || {};
+
+      if (!isCompleted) {
+        // Milestone finished: add bonus activity and update streak!
+        const curToday = updatedDaily[todayStr] || { minutes: 0, topics: 0 };
+        updatedDaily = {
+          ...updatedDaily,
+          [todayStr]: {
+            minutes: curToday.minutes + 30,
+            topics: curToday.topics + 1,
+          },
+        };
+        fireConfetti();
+      }
+
+      const newStreak = !isCompleted
+        ? updateStreakOnActivity(studyData.streak || { count: 0, lastActiveDate: '' })
+        : studyData.streak;
+
+      const updated: UserStudyData = {
+        ...studyData,
+        completedMilestoneIds: updatedList,
+        dailyActivity: updatedDaily,
+        streak: newStreak,
+        lastUpdated: new Date().toISOString(),
+      };
+      persistData(updated);
+    },
+    [studyData, persistData, updateStreakOnActivity, fireConfetti]
+  );
+
   // Action: Update daily target & study goal
   const handleUpdateStudyGoal = useCallback(
     (goal: StudyGoal) => {
@@ -766,6 +963,10 @@ export default function StudyDeckPage() {
             onOpenTargetEstimator={() => setIsTargetEstimatorOpen(true)}
             onDeleteCourse={handleDeleteCourse}
             onResetCourseProgress={handleResetCourseProgress}
+            onUpdateWeeklyGoal={handleUpdateWeeklyGoal}
+            onLogStudySession={handleLogStudySession}
+            onToggleEnrollRoadmap={handleToggleEnrollRoadmap}
+            onToggleMilestoneComplete={handleToggleMilestoneComplete}
             theme={theme}
           />
         </main>
@@ -814,6 +1015,7 @@ export default function StudyDeckPage() {
               onSaveNote={handleSaveNote}
               watchProgress={activeVideo ? studyData.videoProgress?.[activeVideo.videoId] : undefined}
               onUpdateProgress={handleUpdateVideoProgress}
+              onStudyTimeLogged={handleStudyTimeLogged}
               videoTags={activeVideo ? studyData.videoTags?.[activeVideo.videoId] || [] : []}
               onToggleTag={handleToggleTag}
               onTriggerConfetti={fireConfetti}

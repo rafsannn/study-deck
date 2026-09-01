@@ -360,6 +360,7 @@ interface VideoPlayerProps {
   onSaveNote: (videoId: string, note: string) => void;
   watchProgress?: VideoWatchProgress;
   onUpdateProgress?: (videoId: string, progress: VideoWatchProgress) => void;
+  onStudyTimeLogged?: (secondsDelta: number, videoId: string) => void;
   videoTags?: string[];
   onToggleTag?: (videoId: string, tag: string) => void;
   onTriggerConfetti?: () => void;
@@ -385,6 +386,7 @@ export function VideoPlayer({
   onSaveNote,
   watchProgress,
   onUpdateProgress,
+  onStudyTimeLogged,
   videoTags = [],
   onToggleTag,
   onTriggerConfetti,
@@ -453,6 +455,36 @@ export function VideoPlayer({
   const [prevVideoId, setPrevVideoId] = useState<string | null>(null);
   const [startSecondsMap, setStartSecondsMap] = useState<Record<string, number>>({});
   const initialSeekDoneRef = useRef<boolean>(false);
+
+  // Active study duration accumulation refs
+  const lastPlaybackSecondRef = useRef<number | null>(null);
+  const lastWallTimeRef = useRef<number>(0);
+  const accumulatedWatchSecondsRef = useRef<number>(0);
+  const currentVideoIdRef = useRef<string | null>(video?.videoId || null);
+
+  useEffect(() => {
+    // When video changes, flush previous accumulated watch time
+    if (accumulatedWatchSecondsRef.current >= 1 && currentVideoIdRef.current && onStudyTimeLogged) {
+      const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
+      accumulatedWatchSecondsRef.current = 0;
+      onStudyTimeLogged(flushSecs, currentVideoIdRef.current);
+    }
+    currentVideoIdRef.current = video?.videoId || null;
+    lastPlaybackSecondRef.current = null;
+    lastWallTimeRef.current = Date.now();
+  }, [video?.videoId, onStudyTimeLogged]);
+
+  // Flush accumulated watch seconds on unmount
+  useEffect(() => {
+    const onFlush = onStudyTimeLogged;
+    return () => {
+      if (accumulatedWatchSecondsRef.current >= 1 && currentVideoIdRef.current && onFlush) {
+        const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
+        accumulatedWatchSecondsRef.current = 0;
+        onFlush(flushSecs, currentVideoIdRef.current);
+      }
+    };
+  }, [onStudyTimeLogged]);
 
   // Synchronously reset UI state on video change and capture initial start time
   if (video?.videoId && video.videoId !== prevVideoId) {
@@ -718,6 +750,39 @@ export function VideoPlayer({
                 lastWatchedAt: new Date().toISOString(),
               });
             }
+
+            // Real-time study duration logging (even for unfinished videos)
+            if (playerState === 1 && video?.videoId) {
+              const prevPlaySec = lastPlaybackSecondRef.current;
+              const nowWall = Date.now();
+              const wallDelta = (nowWall - lastWallTimeRef.current) / 1000;
+
+              if (prevPlaySec !== null && currentVideoIdRef.current === video.videoId) {
+                const playDelta = currentTime - prevPlaySec;
+                // If the user played forward naturally (delta between 0.1s and 8s)
+                if (playDelta > 0.1 && playDelta <= 8 && wallDelta <= 8) {
+                  accumulatedWatchSecondsRef.current += playDelta;
+
+                  // Flush to study log every ~5 seconds of active watch time
+                  if (accumulatedWatchSecondsRef.current >= 5 && onStudyTimeLogged) {
+                    const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
+                    accumulatedWatchSecondsRef.current = 0;
+                    onStudyTimeLogged(flushSecs, video.videoId);
+                  }
+                }
+              }
+              lastPlaybackSecondRef.current = currentTime;
+              lastWallTimeRef.current = nowWall;
+            } else if (playerState === 2 || playerState === 0) {
+              // Paused or ended -> flush any unlogged watch seconds
+              lastPlaybackSecondRef.current = currentTime;
+              lastWallTimeRef.current = Date.now();
+              if (accumulatedWatchSecondsRef.current >= 1 && video?.videoId && onStudyTimeLogged) {
+                const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
+                accumulatedWatchSecondsRef.current = 0;
+                onStudyTimeLogged(flushSecs, video.videoId);
+              }
+            }
           }
 
           if (playerState === 1) {
@@ -736,7 +801,15 @@ export function VideoPlayer({
 
     window.addEventListener('message', handleWindowMessage);
     return () => window.removeEventListener('message', handleWindowMessage);
-  }, [video, onUpdateProgress, isCompleted, onToggleComplete, totalVideoDuration, startSecondsMap]);
+  }, [
+    video,
+    onUpdateProgress,
+    onStudyTimeLogged,
+    isCompleted,
+    onToggleComplete,
+    totalVideoDuration,
+    startSecondsMap,
+  ]);
 
   // Periodic ping to initialize postMessage stream once iframe loads
   useEffect(() => {

@@ -33,6 +33,44 @@ export interface StudyGoal {
   dailyMinutes: number;
 }
 
+export interface WeeklyStudyGoal {
+  targetMinutes: number;
+  targetTopics: number;
+}
+
+export interface DailyActivityRecord {
+  minutes: number;
+  seconds?: number;
+  topics: number;
+  completedVideoIds?: string[];
+}
+
+export interface RoadmapMilestone {
+  id: string;
+  title: string;
+  description: string;
+  estimatedHours: number;
+  skills: string[];
+  recommendedPlaylistUrl?: string;
+  associatedPlaylistId?: string;
+  isCompleted?: boolean;
+}
+
+export interface LearningRoadmap {
+  id: string;
+  title: string;
+  slug: string;
+  tagline: string;
+  description: string;
+  category: 'Frontend' | 'Backend & Systems' | 'Algorithms' | 'AI & Machine Learning' | 'DevOps & Cloud';
+  icon: string;
+  level: 'Beginner' | 'Intermediate' | 'Advanced' | 'All Levels';
+  estimatedWeeks: number;
+  color: string;
+  milestones: RoadmapMilestone[];
+  isCustom?: boolean;
+}
+
 export interface UserStudyData {
   activePlaylistId: string;
   activeVideoId: string;
@@ -46,6 +84,16 @@ export interface UserStudyData {
   videoTags?: Record<string, string[]>;
   // Daily target configuration
   studyGoal?: StudyGoal;
+  // Weekly target configuration
+  weeklyGoal?: WeeklyStudyGoal;
+  // Daily study log map (YYYY-MM-DD -> DailyActivityRecord)
+  dailyActivity?: Record<string, DailyActivityRecord>;
+  // List of enrolled roadmap IDs
+  enrolledRoadmapIds?: string[];
+  // Completed milestone IDs across roadmaps
+  completedMilestoneIds?: string[];
+  // Custom user-defined roadmaps
+  customRoadmaps?: LearningRoadmap[];
   streak: {
     count: number;
     lastActiveDate: string; // YYYY-MM-DD
