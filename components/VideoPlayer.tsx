@@ -16,6 +16,7 @@ import {
   Plus,
   Play,
   Pause,
+  Volume1,
   Volume2,
   VolumeX,
   RotateCcw,
@@ -408,6 +409,8 @@ export function VideoPlayer({
     return 1;
   });
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [volume, setVolume] = useState<number>(100);
+  const [isVolumeHovered, setIsVolumeHovered] = useState<boolean>(false);
   const [overlayFeedback, setOverlayFeedback] = useState<'play' | 'pause' | null>(null);
   const [newTagInput, setNewTagInput] = useState<string>('');
   const [showTagInput, setShowTagInput] = useState<boolean>(false);
@@ -499,11 +502,30 @@ export function VideoPlayer({
     if (isMuted) {
       sendIframeCommand('unMute', []);
       setIsMuted(false);
+      if (volume === 0) {
+        setVolume(100);
+        sendIframeCommand('setVolume', [100]);
+      }
     } else {
       sendIframeCommand('mute', []);
       setIsMuted(true);
     }
-  }, [isMuted, sendIframeCommand]);
+  }, [isMuted, volume, sendIframeCommand]);
+
+  const handleVolumeChange = useCallback(
+    (newVolume: number) => {
+      setVolume(newVolume);
+      sendIframeCommand('setVolume', [newVolume]);
+      if (newVolume === 0) {
+        setIsMuted(true);
+        sendIframeCommand('mute', []);
+      } else if (isMuted) {
+        setIsMuted(false);
+        sendIframeCommand('unMute', []);
+      }
+    },
+    [isMuted, sendIframeCommand]
+  );
 
   const handleTogglePlayPause = useCallback(() => {
     if (isPlayingLive) {
@@ -1114,15 +1136,50 @@ export function VideoPlayer({
               <RotateCw className="w-3.5 h-3.5" />
             </button>
 
-            <button
-              onClick={handleToggleMute}
-              className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
-                isDark ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300' : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
-              }`}
-              title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
+            {/* Volume Control with Hover Slider */}
+            <div
+              className="relative flex items-center"
+              onMouseEnter={() => setIsVolumeHovered(true)}
+              onMouseLeave={() => setIsVolumeHovered(false)}
             >
-              {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5" />}
-            </button>
+              <button
+                onClick={handleToggleMute}
+                className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
+                    : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+                }`}
+                title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
+              >
+                {isMuted || volume === 0 ? (
+                  <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                ) : volume < 50 ? (
+                  <Volume1 className="w-3.5 h-3.5" />
+                ) : (
+                  <Volume2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+
+              {/* Slider popup on hover */}
+              <div
+                className={`overflow-hidden transition-all duration-200 ease-out flex items-center ${
+                  isVolumeHovered
+                    ? 'w-24 max-w-[100px] opacity-100 ml-2'
+                    : 'w-0 max-w-0 opacity-0 pointer-events-none'
+                }`}
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={isMuted ? 0 : volume}
+                  onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                  className="w-20 h-1.5 rounded-lg bg-zinc-700/60 accent-indigo-500 hover:accent-indigo-400 cursor-pointer transition-all"
+                  title={`Volume: ${isMuted ? 0 : volume}%`}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Right Controls: Speed Presets, Theater, Fullscreen */}
