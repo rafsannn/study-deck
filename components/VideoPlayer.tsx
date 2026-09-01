@@ -11,7 +11,10 @@ import {
   Sparkles,
   Maximize2,
   Minimize2,
+  PictureInPicture2,
   Tv,
+  X,
+  SkipForward,
   Code2,
   Plus,
   Play,
@@ -417,6 +420,7 @@ export function VideoPlayer({
   const [isChaptersExpanded, setIsChaptersExpanded] = useState(false);
   const [isCursorHidden, setIsCursorHidden] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isMiniPlayer, setIsMiniPlayer] = useState<boolean>(false);
   const cursorTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isDark = theme === 'dark';
@@ -819,6 +823,11 @@ export function VideoPlayer({
         e.preventDefault();
         handleToggleMute();
       }
+      // Mini-Player / Picture-in-Picture (I)
+      else if (key === 'i') {
+        e.preventDefault();
+        setIsMiniPlayer((prev) => !prev);
+      }
       // Next Video (N)
       else if (key === 'n') {
         e.preventDefault();
@@ -1023,57 +1032,168 @@ export function VideoPlayer({
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Mini-player placeholder on main page when floating mode is active */}
+      {isMiniPlayer && (
+        <div
+          className={`w-full aspect-video rounded-2xl border border-dashed flex flex-col items-center justify-center p-6 text-center transition-all ${
+            isDark
+              ? 'border-indigo-500/30 bg-indigo-950/10 text-zinc-400'
+              : 'border-indigo-300 bg-indigo-50/50 text-zinc-600'
+          }`}
+        >
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-3 animate-pulse">
+            <PictureInPicture2 className="w-6 h-6" />
+          </div>
+          <h3 className={`text-sm font-semibold mb-1 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+            Mini-Player is Active
+          </h3>
+          <p className="text-xs max-w-sm mb-4 text-zinc-500">
+            The lecture is currently floating at the bottom-right so you can browse the syllabus, write notes, and review chapters seamlessly.
+          </p>
+          <button
+            onClick={() => setIsMiniPlayer(false)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span>Restore Video to Main Deck</span>
+          </button>
+        </div>
+      )}
+
       {/* Embedded YouTube Player Container */}
       <div
         id={`yt-player-container-${video.videoId}`}
         onMouseMove={handlePlayerMouseMove}
         onMouseLeave={handlePlayerMouseLeave}
-        className={`relative w-full rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 group ${
-          isDark
-            ? 'shadow-indigo-500/10 border border-zinc-800 bg-black'
-            : 'shadow-zinc-300/40 border border-zinc-200 bg-black'
-        } ${theaterMode ? 'aspect-[21/9]' : 'aspect-video'} ${
-          isCursorHidden ? 'cursor-none [&_*]:cursor-none select-none' : ''
-        }`}
+        className={`transition-all duration-300 group ${
+          isMiniPlayer
+            ? 'fixed bottom-6 right-6 z-50 w-[300px] sm:w-[360px] md:w-[400px] rounded-2xl shadow-2xl overflow-hidden ring-4 ring-black/80 border border-indigo-500/40 bg-zinc-950 flex flex-col'
+            : `relative w-full rounded-2xl overflow-hidden shadow-2xl ${
+                isDark
+                  ? 'shadow-indigo-500/10 border border-zinc-800 bg-black'
+                  : 'shadow-zinc-300/40 border border-zinc-200 bg-black'
+              } ${theaterMode ? 'aspect-[21/9]' : 'aspect-video'}`
+        } ${isCursorHidden ? 'cursor-none [&_*]:cursor-none select-none' : ''}`}
       >
-        <iframe
-          id={`yt-player-${video.videoId}`}
-          key={video.videoId}
-          src={embedUrl}
-          title={video.title}
-          onLoad={() => {
-            sendIframeCommand('listening', []);
-            sendIframeCommand('setPlaybackRate', [playbackRate]);
-            if (startSec > 2) {
-              sendIframeCommand('seekTo', [startSec, true]);
-            }
-            sendIframeCommand('playVideo', []);
-            setIsPlayingLive(true);
-          }}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          className="absolute inset-0 w-full h-full border-0 block pointer-events-none"
-        />
+        {/* Mini Player Top Bar */}
+        {isMiniPlayer && (
+          <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-zinc-800 text-zinc-200 text-xs select-none">
+            <div className="flex items-center gap-1.5 min-w-0 pr-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+              <span className="font-medium truncate text-[11px] text-zinc-200">
+                {video.title}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => setIsMiniPlayer(false)}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
+                title="Restore Video to Main Deck (I)"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setIsMiniPlayer(false)}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 transition-colors cursor-pointer"
+                title="Close Mini-Player"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
-        {/* Click Overlay to prevent YouTube focus hijacking and enable native app hotkeys */}
-        <div
-          onClick={handleOverlayClick}
-          onDoubleClick={handleOverlayDoubleClick}
-          className={`absolute inset-0 z-10 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-colors ${
-            isCursorHidden ? 'cursor-none' : 'cursor-pointer'
-          }`}
-        >
-          {/* Animated Play/Pause Feedback Badge */}
-          {overlayFeedback && (
-            <div className="p-4 rounded-full bg-black/70 backdrop-blur-md text-white shadow-2xl border border-white/20 animate-pulse pointer-events-none">
-              {overlayFeedback === 'play' ? (
-                <Play className="w-10 h-10 fill-white" />
-              ) : (
-                <Pause className="w-10 h-10 fill-white" />
+        <div className={`relative w-full ${isMiniPlayer ? 'aspect-video' : 'h-full'}`}>
+          <iframe
+            id={`yt-player-${video.videoId}`}
+            key={video.videoId}
+            src={embedUrl}
+            title={video.title}
+            onLoad={() => {
+              sendIframeCommand('listening', []);
+              sendIframeCommand('setPlaybackRate', [playbackRate]);
+              if (startSec > 2) {
+                sendIframeCommand('seekTo', [startSec, true]);
+              }
+              sendIframeCommand('playVideo', []);
+              setIsPlayingLive(true);
+            }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full border-0 block pointer-events-none"
+          />
+
+          {/* Click Overlay to prevent YouTube focus hijacking and enable native app hotkeys */}
+          <div
+            onClick={handleOverlayClick}
+            onDoubleClick={handleOverlayDoubleClick}
+            className={`absolute inset-0 z-10 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-colors ${
+              isCursorHidden ? 'cursor-none' : 'cursor-pointer'
+            }`}
+          >
+            {/* Animated Play/Pause Feedback Badge */}
+            {overlayFeedback && (
+              <div className="p-4 rounded-full bg-black/70 backdrop-blur-md text-white shadow-2xl border border-white/20 animate-pulse pointer-events-none">
+                {overlayFeedback === 'play' ? (
+                  <Play className="w-10 h-10 fill-white" />
+                ) : (
+                  <Pause className="w-10 h-10 fill-white" />
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mini Player Bottom Quick Bar */}
+        {isMiniPlayer && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-950 border-t border-zinc-800 text-zinc-300 text-xs">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleTogglePlayPause}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-200 transition-colors cursor-pointer"
+                title={isPlayingLive ? 'Pause (Space)' : 'Play (Space)'}
+              >
+                {isPlayingLive ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+              </button>
+              <button
+                onClick={() => handleSeekToTime(Math.max(0, currentPlaybackTime - 10))}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                title="Rewind 10s (J)"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => handleSeekToTime(currentPlaybackTime + 10)}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                title="Forward 10s (L)"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={handleToggleMute}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
+              >
+                {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-zinc-400">
+                {formatTime(displayCurrentTime)} / {formatTime(displayDuration)}
+              </span>
+              {hasNext && (
+                <button
+                  onClick={onNextLesson}
+                  className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-indigo-400 transition-colors cursor-pointer"
+                  title="Next Lesson (N)"
+                >
+                  <SkipForward className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Custom Player Control Console */}
@@ -1212,12 +1332,26 @@ export function VideoPlayer({
                 theaterMode
                   ? 'bg-indigo-600 border-indigo-500 text-white'
                   : isDark
-                  ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400'
-                  : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+                  ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950'
               }`}
               title="Toggle Theater Mode"
             >
               <Tv className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              onClick={() => setIsMiniPlayer(!isMiniPlayer)}
+              className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+                isMiniPlayer
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
+                  : isDark
+                  ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950'
+              }`}
+              title="Toggle Picture-in-Picture / Mini-Player (I)"
+            >
+              <PictureInPicture2 className="w-3.5 h-3.5" />
             </button>
 
             <button
@@ -1653,8 +1787,17 @@ export function VideoPlayer({
             isDark ? 'text-zinc-500' : 'text-zinc-400'
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span>Shortcuts:</span>
+            <span
+              className={`font-mono border px-1.5 py-0.5 rounded ${
+                isDark
+                  ? 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                  : 'bg-zinc-100 border-zinc-200 text-zinc-600'
+              }`}
+            >
+              [I] Mini-Player
+            </span>
             <span
               className={`font-mono border px-1.5 py-0.5 rounded ${
                 isDark
@@ -1680,12 +1823,12 @@ export function VideoPlayer({
                   : 'bg-zinc-100 border-zinc-200 text-zinc-600'
               }`}
             >
-              [C] Complete
+              [D] Complete
             </span>
           </div>
         </div>
 
-        {/* Rafsan's Code & Key Takeaways Scratchpad */}
+        {/* Code & Key Takeaways Scratchpad */}
         {showNotes && (
           <VideoNotesEditor
             key={video.videoId}
