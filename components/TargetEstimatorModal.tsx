@@ -139,7 +139,11 @@ export function TargetEstimatorModal({
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800/40">
+        <div
+          className={`flex items-center justify-between pb-4 border-b ${
+            isDark ? 'border-zinc-800/40' : 'border-zinc-200'
+          }`}
+        >
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
               <Target className="w-4 h-4" />
@@ -167,7 +171,11 @@ export function TargetEstimatorModal({
         {/* Scope Selector */}
         <div className="my-4 space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+            <label
+              className={`text-xs font-semibold uppercase tracking-wider ${
+                isDark ? 'text-zinc-400' : 'text-zinc-600'
+              }`}
+            >
               Course Scope
             </label>
             <select
@@ -187,7 +195,13 @@ export function TargetEstimatorModal({
           </div>
 
           {/* Goal Type Selector */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-zinc-950/40 border border-zinc-800/40 text-xs font-semibold">
+          <div
+            className={`grid grid-cols-2 gap-2 p-1 rounded-2xl border text-xs font-semibold ${
+              isDark
+                ? 'bg-zinc-950/40 border-zinc-800/40'
+                : 'bg-zinc-100 border-zinc-200'
+            }`}
+          >
             <button
               onClick={() => setGoalType('topics')}
               className={`py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
@@ -301,17 +315,29 @@ export function TargetEstimatorModal({
               <span className={isDark ? 'text-white' : 'text-zinc-900'}>{formattedTargetDate}</span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-zinc-800/40 text-xs">
+            <div
+              className={`grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t text-xs ${
+                isDark ? 'border-zinc-800/40' : 'border-zinc-200'
+              }`}
+            >
               <div className="flex flex-col">
                 <span className="text-[10px] text-zinc-500 uppercase">Remaining Topics</span>
-                <span className="font-mono font-bold text-zinc-300">
+                <span
+                  className={`font-mono font-bold ${
+                    isDark ? 'text-zinc-300' : 'text-zinc-800'
+                  }`}
+                >
                   {remainingTopics} of {totalTopicsInScope}
                 </span>
               </div>
 
               <div className="flex flex-col">
                 <span className="text-[10px] text-zinc-500 uppercase">Remaining Content</span>
-                <span className="font-mono font-bold text-zinc-300">
+                <span
+                  className={`font-mono font-bold ${
+                    isDark ? 'text-zinc-300' : 'text-zinc-800'
+                  }`}
+                >
                   {formatDurationHuman(remainingSeconds)}
                 </span>
               </div>

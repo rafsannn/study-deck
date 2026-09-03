@@ -343,7 +343,11 @@ export function StatsModal({
           </div>
 
           {showImport && (
-            <div className="space-y-2 pt-2 border-t border-zinc-800/80 animate-fade-in">
+            <div
+              className={`space-y-2 pt-2 border-t animate-fade-in ${
+                isDark ? 'border-zinc-800/80' : 'border-zinc-200'
+              }`}
+            >
               <textarea
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}

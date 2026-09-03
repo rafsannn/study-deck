@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useSyncExternalStore } from 'react';
 import {
   Flame,
   Calendar,
@@ -37,6 +37,8 @@ interface DayCellData {
   monthName: string;
 }
 
+const emptySubscribe = () => () => {};
+
 export function StudyHeatmap({
   studyData,
   onUpdateWeeklyGoal,
@@ -44,6 +46,12 @@ export function StudyHeatmap({
   theme = 'dark',
 }: StudyHeatmapProps) {
   const isDark = theme === 'dark';
+
+  const isMounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
   const [hoveredCell, setHoveredCell] = useState<DayCellData | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
@@ -269,7 +277,11 @@ export function StudyHeatmap({
       }`}
     >
       {/* Header & Weekly Target Progress Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-6 border-b border-zinc-800/40">
+      <div
+        className={`flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-6 border-b ${
+          isDark ? 'border-zinc-800/40' : 'border-zinc-200'
+        }`}
+      >
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -426,7 +438,11 @@ export function StudyHeatmap({
             </span>
           </div>
 
-          <div className="w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
+          <div
+            className={`w-full h-2 rounded-full overflow-hidden ${
+              isDark ? 'bg-zinc-800' : 'bg-zinc-200'
+            }`}
+          >
             <div
               className="h-full bg-sky-500 rounded-full transition-all duration-500"
               style={{ width: `${currentWeekMetrics.minsPercent}%` }}
@@ -441,7 +457,11 @@ export function StudyHeatmap({
           }`}
         >
           <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span
+              className={`font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
+                isDark ? 'text-zinc-400' : 'text-zinc-600'
+              }`}
+            >
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
               <span>Topics Finished</span>
             </span>
@@ -459,7 +479,11 @@ export function StudyHeatmap({
             </span>
           </div>
 
-          <div className="w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
+          <div
+            className={`w-full h-2 rounded-full overflow-hidden ${
+              isDark ? 'bg-zinc-800' : 'bg-zinc-200'
+            }`}
+          >
             <div
               className="h-full bg-emerald-500 rounded-full transition-all duration-500"
               style={{ width: `${currentWeekMetrics.topicsPercent}%` }}
@@ -539,188 +563,198 @@ export function StudyHeatmap({
         >
           {/* Responsive SVG Contribution Graph that expands to fill available container space */}
           <div className="w-full">
-            <svg
-              viewBox="0 0 812 131"
-              className="w-full h-auto max-w-full select-none overflow-visible"
-              aria-label="Activity Contribution Graph"
-            >
-              {/* Month Labels aligned to exact week index x-coordinates */}
-              {monthLabels.map((m) => {
-                const step = 15; // 11.5 cellSize + 3.5 gap
-                const leftMargin = 28;
-                const x = leftMargin + m.index * step;
-                return (
-                  <text
-                    key={`${m.index}-${m.text}`}
-                    x={x}
-                    y={13}
-                    fill={isDark ? '#71717a' : '#71717a'}
-                    fontSize="9.5"
-                    fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-                    fontWeight="500"
-                  >
-                    {m.text}
-                  </text>
-                );
-              })}
-
-              {/* Day Labels on Left */}
-              <text
-                x="0"
-                y={20 + 0 * 15 + 9}
-                fill={isDark ? '#52525b' : '#71717a'}
-                fontSize="8.5"
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+            {!isMounted ? (
+              <div className="w-full h-[120px] rounded-xl flex items-center justify-center animate-pulse bg-zinc-900/20">
+                <span className="text-[11px] font-mono text-zinc-500">Loading activity matrix...</span>
+              </div>
+            ) : (
+              <svg
+                viewBox="0 0 812 131"
+                className="w-full h-auto max-w-full select-none overflow-visible"
+                aria-label="Activity Contribution Graph"
               >
-                Sun
-              </text>
-              <text
-                x="0"
-                y={20 + 2 * 15 + 9}
-                fill={isDark ? '#52525b' : '#71717a'}
-                fontSize="8.5"
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-              >
-                Tue
-              </text>
-              <text
-                x="0"
-                y={20 + 4 * 15 + 9}
-                fill={isDark ? '#52525b' : '#71717a'}
-                fontSize="8.5"
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-              >
-                Thu
-              </text>
-              <text
-                x="0"
-                y={20 + 6 * 15 + 9}
-                fill={isDark ? '#52525b' : '#71717a'}
-                fontSize="8.5"
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-              >
-                Sat
-              </text>
+                {/* Month Labels aligned to exact week index x-coordinates */}
+                {monthLabels.map((m) => {
+                  const step = 15; // 11.5 cellSize + 3.5 gap
+                  const leftMargin = 28;
+                  const x = leftMargin + m.index * step;
+                  return (
+                    <text
+                      key={`${m.index}-${m.text}`}
+                      x={x}
+                      y={13}
+                      fill={isDark ? '#71717a' : '#71717a'}
+                      fontSize="9.5"
+                      fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                      fontWeight="500"
+                    >
+                      {m.text}
+                    </text>
+                  );
+                })}
 
-              {/* 52-Week Matrix of Day Rectangles */}
-              {weeks.map((week, wIdx) => {
-                const step = 15;
-                const leftMargin = 28;
-                const topMargin = 20;
-                const cellSize = 11.5;
-                const colX = leftMargin + wIdx * step;
+                {/* Day Labels on Left */}
+                <text
+                  x="0"
+                  y={20 + 0 * 15 + 9}
+                  fill={isDark ? '#52525b' : '#71717a'}
+                  fontSize="8.5"
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                >
+                  Sun
+                </text>
+                <text
+                  x="0"
+                  y={20 + 2 * 15 + 9}
+                  fill={isDark ? '#52525b' : '#71717a'}
+                  fontSize="8.5"
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                >
+                  Tue
+                </text>
+                <text
+                  x="0"
+                  y={20 + 4 * 15 + 9}
+                  fill={isDark ? '#52525b' : '#71717a'}
+                  fontSize="8.5"
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                >
+                  Thu
+                </text>
+                <text
+                  x="0"
+                  y={20 + 6 * 15 + 9}
+                  fill={isDark ? '#52525b' : '#71717a'}
+                  fontSize="8.5"
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                >
+                  Sat
+                </text>
 
-                return (
-                  <g key={wIdx}>
-                    {week.map((day, dIdx) => {
-                      const rowY = topMargin + dIdx * step;
-                      const isToday =
-                        day.dateStr === new Date().toISOString().slice(0, 10);
+                {/* 52-Week Matrix of Day Rectangles */}
+                {weeks.map((week, wIdx) => {
+                  const step = 15;
+                  const leftMargin = 28;
+                  const topMargin = 20;
+                  const cellSize = 11.5;
+                  const colX = leftMargin + wIdx * step;
 
-                      // Determine colors based on intensity
-                      let fill = isDark ? '#18181b' : '#e4e4e7';
-                      let stroke = isDark ? '#27272a' : '#d4d4d8';
+                  return (
+                    <g key={wIdx}>
+                      {week.map((day, dIdx) => {
+                        const rowY = topMargin + dIdx * step;
+                        const isToday =
+                          day.dateStr === new Date().toISOString().slice(0, 10);
 
-                      if (day.intensityLevel === 1) {
-                        fill = isDark ? '#064e3b' : '#a7f3d0';
-                        stroke = isDark ? '#065f46' : '#6ee7b7';
-                      } else if (day.intensityLevel === 2) {
-                        fill = isDark ? '#047857' : '#34d399';
-                        stroke = isDark ? '#059669' : '#10b981';
-                      } else if (day.intensityLevel === 3) {
-                        fill = isDark ? '#059669' : '#059669';
-                        stroke = isDark ? '#10b981' : '#047857';
-                      } else if (day.intensityLevel === 4) {
-                        fill = isDark ? '#34d399' : '#047857';
-                        stroke = isDark ? '#6ee7b7' : '#064e3b';
-                      }
+                        // Determine colors based on intensity
+                        let fill = isDark ? '#18181b' : '#e4e4e7';
+                        let stroke = isDark ? '#27272a' : '#d4d4d8';
 
-                      return (
-                        <g key={day.dateStr}>
-                          {isToday && (
+                        if (day.intensityLevel === 1) {
+                          fill = isDark ? '#064e3b' : '#a7f3d0';
+                          stroke = isDark ? '#065f46' : '#6ee7b7';
+                        } else if (day.intensityLevel === 2) {
+                          fill = isDark ? '#047857' : '#34d399';
+                          stroke = isDark ? '#059669' : '#10b981';
+                        } else if (day.intensityLevel === 3) {
+                          fill = isDark ? '#059669' : '#059669';
+                          stroke = isDark ? '#10b981' : '#047857';
+                        } else if (day.intensityLevel === 4) {
+                          fill = isDark ? '#34d399' : '#047857';
+                          stroke = isDark ? '#6ee7b7' : '#064e3b';
+                        }
+
+                        return (
+                          <g key={day.dateStr}>
+                            {isToday && (
+                              <rect
+                                x={colX - 1.2}
+                                y={rowY - 1.2}
+                                width={cellSize + 2.4}
+                                height={cellSize + 2.4}
+                                rx={3.2}
+                                ry={3.2}
+                                fill="none"
+                                stroke={isDark ? '#818cf8' : '#6366f1'}
+                                strokeWidth={1.5}
+                              />
+                            )}
                             <rect
-                              x={colX - 1.2}
-                              y={rowY - 1.2}
-                              width={cellSize + 2.4}
-                              height={cellSize + 2.4}
-                              rx={3.2}
-                              ry={3.2}
-                              fill="none"
-                              stroke={isDark ? '#818cf8' : '#6366f1'}
-                              strokeWidth={1.5}
+                              x={colX}
+                              y={rowY}
+                              width={cellSize}
+                              height={cellSize}
+                              rx={2.5}
+                              ry={2.5}
+                              fill={fill}
+                              stroke={stroke}
+                              strokeWidth={0.8}
+                              className="cursor-pointer transition-opacity hover:opacity-80"
+                              onMouseEnter={(e) => {
+                                setHoveredCell(day);
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setTooltipPos({
+                                  x: rect.left + rect.width / 2,
+                                  y: rect.top - 8,
+                                });
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredCell(null);
+                                setTooltipPos(null);
+                              }}
                             />
-                          )}
-                          <rect
-                            x={colX}
-                            y={rowY}
-                            width={cellSize}
-                            height={cellSize}
-                            rx={2.5}
-                            ry={2.5}
-                            fill={fill}
-                            stroke={stroke}
-                            strokeWidth={0.8}
-                            className="cursor-pointer transition-opacity hover:opacity-80"
-                            onMouseEnter={(e) => {
-                              setHoveredCell(day);
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setTooltipPos({
-                                x: rect.left + rect.width / 2,
-                                y: rect.top - 8,
-                              });
-                            }}
-                            onMouseLeave={() => {
-                              setHoveredCell(null);
-                              setTooltipPos(null);
-                            }}
-                          />
-                        </g>
-                      );
-                    })}
-                  </g>
-                );
-              })}
-            </svg>
+                          </g>
+                        );
+                      })}
+                    </g>
+                  );
+                })}
+              </svg>
+            )}
           </div>
 
           {/* Matrix Legend */}
-            <div className="flex items-center justify-between pt-3 mt-3 border-t border-zinc-800/40 text-[10px] text-zinc-500 font-mono">
-              <div className="flex items-center gap-2">
-                <span>Learn every day to maintain streak</span>
-              </div>
+          <div
+            className={`flex items-center justify-between pt-3 mt-3 border-t text-[10px] text-zinc-500 font-mono ${
+              isDark ? 'border-zinc-800/40' : 'border-zinc-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span>Learn every day to maintain streak</span>
+            </div>
 
-              <div className="flex items-center gap-1.5">
-                <span>Less</span>
-                <div
-                  className={`w-3 h-3 rounded-[3px] ${
-                    isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-zinc-200'
-                  }`}
-                />
-                <div
-                  className={`w-3 h-3 rounded-[3px] ${
-                    isDark ? 'bg-emerald-950 border border-emerald-800' : 'bg-emerald-200'
-                  }`}
-                />
-                <div
-                  className={`w-3 h-3 rounded-[3px] ${
-                    isDark ? 'bg-emerald-800' : 'bg-emerald-400'
-                  }`}
-                />
-                <div
-                  className={`w-3 h-3 rounded-[3px] ${
-                    isDark ? 'bg-emerald-600' : 'bg-emerald-500'
-                  }`}
-                />
-                <div
-                  className={`w-3 h-3 rounded-[3px] ${
-                    isDark ? 'bg-emerald-400' : 'bg-emerald-600'
-                  }`}
-                />
-                <span>More</span>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span>Less</span>
+              <div
+                className={`w-3 h-3 rounded-[3px] ${
+                  isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-zinc-200'
+                }`}
+              />
+              <div
+                className={`w-3 h-3 rounded-[3px] ${
+                  isDark ? 'bg-emerald-950 border border-emerald-800' : 'bg-emerald-200'
+                }`}
+              />
+              <div
+                className={`w-3 h-3 rounded-[3px] ${
+                  isDark ? 'bg-emerald-800' : 'bg-emerald-400'
+                }`}
+              />
+              <div
+                className={`w-3 h-3 rounded-[3px] ${
+                  isDark ? 'bg-emerald-600' : 'bg-emerald-500'
+                }`}
+              />
+              <div
+                className={`w-3 h-3 rounded-[3px] ${
+                  isDark ? 'bg-emerald-400' : 'bg-emerald-600'
+                }`}
+              />
+              <span>More</span>
             </div>
           </div>
         </div>
+      </div>
 
       {/* Floating Hover Tooltip */}
       {hoveredCell && tooltipPos && (
@@ -765,7 +799,11 @@ export function StudyHeatmap({
           </div>
 
           {hoveredCell.intensityLevel >= 3 && (
-            <div className="text-[10px] text-amber-400 font-semibold pt-0.5 border-t border-zinc-800">
+            <div
+              className={`text-[10px] text-amber-400 font-semibold pt-0.5 border-t ${
+                isDark ? 'border-zinc-800' : 'border-zinc-200'
+              }`}
+            >
               🔥 High Intensity Session!
             </div>
           )}
@@ -782,7 +820,11 @@ export function StudyHeatmap({
                 : 'bg-white border-zinc-200 text-zinc-900'
             }`}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+            <div
+              className={`flex items-center justify-between pb-3 border-b ${
+                isDark ? 'border-zinc-800' : 'border-zinc-200'
+              }`}
+            >
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
                   <Plus className="w-4 h-4" />
