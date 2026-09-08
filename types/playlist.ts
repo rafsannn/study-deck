@@ -31,6 +31,7 @@ export interface VideoWatchProgress {
 export interface StudyGoal {
   dailyTopics: number;
   dailyMinutes: number;
+  goalType?: 'topics' | 'time';
 }
 
 export interface WeeklyStudyGoal {

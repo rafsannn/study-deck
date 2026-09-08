@@ -39,6 +39,7 @@ const DEFAULT_INITIAL_STUDY_DATA: UserStudyData = {
   studyGoal: {
     dailyTopics: 2,
     dailyMinutes: 45,
+    goalType: 'topics',
   },
   weeklyGoal: {
     targetMinutes: 300,
@@ -80,7 +81,13 @@ function getStoreSnapshot(): UserStudyData {
           videoTags: parsed.videoTags || {},
           streak: parsed.streak || { count: 0, lastActiveDate: '' },
           customPlaylists: parsed.customPlaylists || [],
-          studyGoal: parsed.studyGoal || DEFAULT_INITIAL_STUDY_DATA.studyGoal,
+          studyGoal: parsed.studyGoal
+            ? {
+                dailyTopics: parsed.studyGoal.dailyTopics ?? 2,
+                dailyMinutes: parsed.studyGoal.dailyMinutes ?? 45,
+                goalType: parsed.studyGoal.goalType ?? 'topics',
+              }
+            : DEFAULT_INITIAL_STUDY_DATA.studyGoal,
           weeklyGoal: parsed.weeklyGoal || DEFAULT_INITIAL_STUDY_DATA.weeklyGoal,
           dailyActivity: parsed.dailyActivity || {},
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
@@ -1010,7 +1017,7 @@ export default function StudyDeckPage() {
       />
 
       <TargetEstimatorModal
-        key={`target-modal-${studyData.studyGoal?.dailyTopics || 2}-${studyData.studyGoal?.dailyMinutes || 45}-${currentCourse?.id || 'all'}-${isTargetEstimatorOpen}`}
+        key={`target-modal-${studyData.studyGoal?.goalType || 'topics'}-${studyData.studyGoal?.dailyTopics || 2}-${studyData.studyGoal?.dailyMinutes || 45}-${currentCourse?.id || 'all'}-${isTargetEstimatorOpen}`}
         isOpen={isTargetEstimatorOpen}
         onClose={() => setIsTargetEstimatorOpen(false)}
         courses={allCourses}

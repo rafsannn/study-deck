@@ -51,6 +51,7 @@ export function TargetEstimatorModal({
   const defaultGoal: StudyGoal = studyData.studyGoal || {
     dailyTopics: 2,
     dailyMinutes: 45,
+    goalType: 'topics',
   };
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>(
@@ -58,7 +59,9 @@ export function TargetEstimatorModal({
   );
   const [dailyTopics, setDailyTopics] = useState<number>(defaultGoal.dailyTopics || 2);
   const [dailyMinutes, setDailyMinutes] = useState<number>(defaultGoal.dailyMinutes || 45);
-  const [goalType, setGoalType] = useState<'topics' | 'time'>('topics');
+  const [goalType, setGoalType] = useState<'topics' | 'time'>(
+    defaultGoal.goalType || 'topics'
+  );
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   if (!isOpen) return null;
@@ -116,6 +119,7 @@ export function TargetEstimatorModal({
     onUpdateGoal({
       dailyTopics,
       dailyMinutes,
+      goalType,
     });
     setSavedSuccess(true);
     setTimeout(() => {
@@ -240,7 +244,13 @@ export function TargetEstimatorModal({
             {goalType === 'topics' ? (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-zinc-300">Daily Topic Target</span>
+                  <span
+                    className={`text-xs font-medium ${
+                      isDark ? 'text-zinc-300' : 'text-zinc-700'
+                    }`}
+                  >
+                    Daily Topic Target
+                  </span>
                   <span className="text-sm font-bold font-mono text-indigo-400">
                     {dailyTopics} {dailyTopics === 1 ? 'topic' : 'topics'} / day
                   </span>
@@ -252,7 +262,9 @@ export function TargetEstimatorModal({
                   step="1"
                   value={dailyTopics}
                   onChange={(e) => setDailyTopics(parseInt(e.target.value))}
-                  className="w-full accent-indigo-500 cursor-pointer h-2 bg-zinc-800 rounded-lg"
+                  className={`w-full accent-indigo-500 cursor-pointer h-2 rounded-lg ${
+                    isDark ? 'bg-zinc-800' : 'bg-zinc-200'
+                  }`}
                 />
                 <div className="flex justify-between text-[10px] text-zinc-500 font-mono mt-1">
                   <span>1 topic (Relaxed)</span>
@@ -263,7 +275,13 @@ export function TargetEstimatorModal({
             ) : (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-zinc-300">Daily Study Duration</span>
+                  <span
+                    className={`text-xs font-medium ${
+                      isDark ? 'text-zinc-300' : 'text-zinc-700'
+                    }`}
+                  >
+                    Daily Study Duration
+                  </span>
                   <span className="text-sm font-bold font-mono text-indigo-400">
                     {dailyMinutes} minutes / day
                   </span>
@@ -275,7 +293,9 @@ export function TargetEstimatorModal({
                   step="15"
                   value={dailyMinutes}
                   onChange={(e) => setDailyMinutes(parseInt(e.target.value))}
-                  className="w-full accent-indigo-500 cursor-pointer h-2 bg-zinc-800 rounded-lg"
+                  className={`w-full accent-indigo-500 cursor-pointer h-2 rounded-lg ${
+                    isDark ? 'bg-zinc-800' : 'bg-zinc-200'
+                  }`}
                 />
                 <div className="flex justify-between text-[10px] text-zinc-500 font-mono mt-1">
                   <span>15 mins</span>
