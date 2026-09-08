@@ -14,6 +14,7 @@ import {
   Tv,
   X,
   SkipForward,
+  SkipBack,
   Code2,
   Plus,
   Play,
@@ -421,9 +422,15 @@ export function VideoPlayer({
   const [isChaptersExpanded, setIsChaptersExpanded] = useState(false);
   const [isCursorHidden, setIsCursorHidden] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isFallbackMaximized, setIsFallbackMaximized] = useState<boolean>(false);
+  const [isFsChaptersOpen, setIsFsChaptersOpen] = useState<boolean>(false);
+  const [isFsControlsHovered, setIsFsControlsHovered] = useState<boolean>(false);
   const cursorTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isDark = theme === 'dark';
+  const isPlayerMaximized = isFullscreen || isFallbackMaximized;
+  const showFullscreenHud =
+    isPlayerMaximized && (!isCursorHidden || isFsChaptersOpen || isFsControlsHovered);
 
   // Safe PostMessage dispatcher to the YouTube iframe
   const sendIframeCommand = useCallback(
@@ -577,14 +584,23 @@ export function VideoPlayer({
       document.getElementById(`yt-player-container-${video.videoId}`) ||
       document.getElementById(`yt-player-${video.videoId}`);
 
-    if (!container) return;
-
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
-    } else {
-      container.requestFullscreen().catch(() => {});
+      setIsFallbackMaximized(false);
+    } else if (isFallbackMaximized) {
+      setIsFallbackMaximized(false);
+    } else if (container) {
+      const promise = container.requestFullscreen();
+      if (promise && typeof promise.catch === 'function') {
+        promise.catch(() => {
+          // Native fullscreen disallowed in sandboxed container, fallback to window-maximize
+          setIsFallbackMaximized(true);
+        });
+      } else {
+        setIsFallbackMaximized(true);
+      }
     }
-  }, [video]);
+  }, [video, isFallbackMaximized]);
 
   // Fullscreen state listener
   useEffect(() => {
@@ -592,7 +608,10 @@ export function VideoPlayer({
       const fs = !!document.fullscreenElement;
       setIsFullscreen(fs);
       if (!fs) {
+        setIsFallbackMaximized(false);
         setIsCursorHidden(false);
+        setIsFsChaptersOpen(false);
+        setIsFsControlsHovered(false);
       }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -600,6 +619,16 @@ export function VideoPlayer({
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);
+
+  // Lock body scroll when fallback maximized
+  useEffect(() => {
+    if (isFallbackMaximized) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isFallbackMaximized]);
 
   // Handle cursor idle timer when mouse is moved over video or when in fullscreen
   const handlePlayerMouseMove = useCallback(() => {
@@ -609,21 +638,21 @@ export function VideoPlayer({
     }
     cursorTimerRef.current = setTimeout(() => {
       setIsCursorHidden(true);
-    }, 2500);
+    }, 2800);
   }, []);
 
   const handlePlayerMouseLeave = useCallback(() => {
-    if (!isFullscreen) {
+    if (!isPlayerMaximized) {
       if (cursorTimerRef.current) {
         clearTimeout(cursorTimerRef.current);
       }
       setIsCursorHidden(false);
     }
-  }, [isFullscreen]);
+  }, [isPlayerMaximized]);
 
   // Global mousemove in fullscreen to reveal cursor and reset inactivity timer
   useEffect(() => {
-    if (!isFullscreen) return;
+    if (!isPlayerMaximized) return;
 
     const handleGlobalMouseMove = () => {
       handlePlayerMouseMove();
@@ -633,7 +662,7 @@ export function VideoPlayer({
     return () => {
       window.removeEventListener('mousemove', handleGlobalMouseMove);
     };
-  }, [isFullscreen, handlePlayerMouseMove]);
+  }, [isPlayerMaximized, handlePlayerMouseMove]);
 
   // Clean up timer on unmount
   useEffect(() => {
@@ -645,6 +674,10 @@ export function VideoPlayer({
   }, []);
 
   const handleOverlayClick = useCallback(() => {
+    if (isFsChaptersOpen) {
+      setIsFsChaptersOpen(false);
+      return;
+    }
     if (isPlayingLive) {
       sendIframeCommand('pauseVideo', []);
       setIsPlayingLive(false);
@@ -660,7 +693,7 @@ export function VideoPlayer({
     setTimeout(() => {
       setOverlayFeedback(null);
     }, 600);
-  }, [isPlayingLive, sendIframeCommand]);
+  }, [isPlayingLive, sendIframeCommand, isFsChaptersOpen]);
 
   const handleOverlayDoubleClick = useCallback(() => {
     handleToggleFullscreen();
@@ -915,6 +948,21 @@ export function VideoPlayer({
         const pad = document.getElementById('video-scratchpad');
         if (pad) pad.focus();
       }
+      // Toggle Chapters (C)
+      else if (key === 'c') {
+        e.preventDefault();
+        if (isPlayerMaximized) {
+          setIsFsChaptersOpen((prev) => !prev);
+        } else {
+          setIsChaptersExpanded((prev) => !prev);
+        }
+      }
+      // Escape key in fallback maximize
+      else if (e.key === 'Escape' && isFallbackMaximized) {
+        e.preventDefault();
+        setIsFallbackMaximized(false);
+        setIsFsChaptersOpen(false);
+      }
       // Decrease Speed (< or [)
       else if (e.key === '<' || e.key === ',' || e.key === '[') {
         e.preventDefault();
@@ -953,6 +1001,8 @@ export function VideoPlayer({
     handleToggleMute,
     handleSeekToTime,
     currentPlaybackTime,
+    isPlayerMaximized,
+    isFallbackMaximized,
   ]);
 
   const handleCopyLink = async () => {
@@ -1103,15 +1153,21 @@ export function VideoPlayer({
         id={`yt-player-container-${video.videoId}`}
         onMouseMove={handlePlayerMouseMove}
         onMouseLeave={handlePlayerMouseLeave}
-        className={`relative w-full rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 group ${
-          isDark
-            ? 'shadow-indigo-500/10 border border-zinc-800 bg-black'
-            : 'shadow-zinc-300/40 border border-zinc-200 bg-black'
-        } ${theaterMode ? 'aspect-[21/9]' : 'aspect-video'} ${
-          isCursorHidden ? 'cursor-none [&_*]:cursor-none select-none' : ''
+        className={`relative w-full overflow-hidden shadow-2xl transition-all duration-300 group ${
+          isPlayerMaximized
+            ? 'fixed inset-0 z-50 w-screen h-screen max-w-none max-h-none rounded-none border-0 bg-black flex items-center justify-center'
+            : `${
+                isDark
+                  ? 'shadow-indigo-500/10 border border-zinc-800 bg-black'
+                  : 'shadow-zinc-300/40 border border-zinc-200 bg-black'
+              } rounded-2xl ${theaterMode ? 'aspect-[21/9]' : 'aspect-video'}`
+        } ${
+          isCursorHidden && isPlayerMaximized && !isFsChaptersOpen && !isFsControlsHovered
+            ? 'cursor-none select-none'
+            : ''
         }`}
       >
-        <div className="relative w-full h-full">
+        <div className="relative w-full h-full flex items-center justify-center bg-black">
           <iframe
             id={`yt-player-${video.videoId}`}
             key={video.videoId}
@@ -1136,7 +1192,9 @@ export function VideoPlayer({
             onClick={handleOverlayClick}
             onDoubleClick={handleOverlayDoubleClick}
             className={`absolute inset-0 z-10 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-colors ${
-              isCursorHidden ? 'cursor-none' : 'cursor-pointer'
+              isCursorHidden && isPlayerMaximized && !isFsChaptersOpen && !isFsControlsHovered
+                ? 'cursor-none'
+                : 'cursor-pointer'
             }`}
           >
             {/* Animated Play/Pause Feedback Badge */}
@@ -1150,6 +1208,356 @@ export function VideoPlayer({
               </div>
             )}
           </div>
+
+          {/* Fullscreen Overlay HUD Controls */}
+          {isPlayerMaximized && (
+            <>
+              {/* Fullscreen Top HUD Bar: Title, Active Chapter, Chapters toggle, Exit Fullscreen */}
+              <div
+                onMouseEnter={() => setIsFsControlsHovered(true)}
+                onMouseLeave={() => setIsFsControlsHovered(false)}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                className={`absolute top-0 inset-x-0 z-30 p-4 sm:p-6 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-center justify-between gap-4 transition-all duration-300 ${
+                  showFullscreenHud
+                    ? 'opacity-100 translate-y-0'
+                    : 'opacity-0 -translate-y-4 pointer-events-none'
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex flex-col min-w-0">
+                    <h2 className="text-white font-semibold text-sm sm:text-base truncate max-w-md sm:max-w-xl drop-shadow-md">
+                      {video.title}
+                    </h2>
+                    {currentActiveChapter && (
+                      <div className="flex items-center gap-2 text-xs text-indigo-300 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+                        <span className="font-mono text-[11px] text-indigo-200 shrink-0">
+                          {currentActiveChapter.timeFormatted}
+                        </span>
+                        <span className="text-zinc-500 shrink-0">•</span>
+                        <span className="truncate max-w-xs sm:max-w-md text-zinc-300">
+                          {currentActiveChapter.title}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {chapters.length > 0 && (
+                    <button
+                      onClick={() => setIsFsChaptersOpen(!isFsChaptersOpen)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border backdrop-blur-md transition-all cursor-pointer ${
+                        isFsChaptersOpen
+                          ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/40'
+                          : 'bg-zinc-900/80 hover:bg-zinc-800/90 border-zinc-700/70 text-zinc-200 hover:text-white'
+                      }`}
+                      title="Toggle Chapters List (C)"
+                    >
+                      <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Chapters</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-white/10 text-[10px] font-mono">
+                        {chapters.length}
+                      </span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={handleToggleFullscreen}
+                    className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-700/70 text-zinc-200 hover:text-white transition-all cursor-pointer backdrop-blur-md"
+                    title="Exit Fullscreen (Esc or F)"
+                    aria-label="Exit Fullscreen"
+                  >
+                    <Minimize2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Fullscreen Chapter Drawer / Overlay */}
+              {isFsChaptersOpen && chapters.length > 0 && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  onMouseEnter={() => setIsFsControlsHovered(true)}
+                  onMouseLeave={() => setIsFsControlsHovered(false)}
+                  className="absolute top-20 right-4 sm:right-6 bottom-28 z-40 w-80 sm:w-96 bg-zinc-950/95 backdrop-blur-xl border border-zinc-800/90 rounded-2xl shadow-2xl p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-right-4 duration-200"
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
+                    <div className="flex items-center gap-2">
+                      <Bookmark className="w-4 h-4 text-indigo-400" />
+                      <span className="text-white font-semibold text-sm">Video Chapters</span>
+                      <span className="text-zinc-500 text-xs font-mono">({chapters.length})</span>
+                    </div>
+                    <button
+                      onClick={() => setIsFsChaptersOpen(false)}
+                      className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      title="Close chapters list"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+                    {chapters.map((chap, idx) => {
+                      const isActive = activeChapterIndex === idx;
+                      const nextChap = chapters[idx + 1];
+                      const segDuration = nextChap ? nextChap.time - chap.time : null;
+                      return (
+                        <button
+                          key={chap.id}
+                          onClick={() => {
+                            handleSeekToTime(chap.time);
+                          }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/30'
+                              : 'bg-zinc-900/60 hover:bg-zinc-800/80 text-zinc-300 hover:text-white border border-zinc-800/50'
+                          }`}
+                        >
+                          <span
+                            className={`font-mono text-[11px] px-1.5 py-0.5 rounded shrink-0 ${
+                              isActive ? 'bg-black/30 text-white' : 'bg-zinc-800 text-indigo-300'
+                            }`}
+                          >
+                            {chap.timeFormatted}
+                          </span>
+                          <span className="truncate flex-1">{chap.title}</span>
+                          {segDuration && (
+                            <span
+                              className={`text-[10px] font-mono shrink-0 ${
+                                isActive ? 'text-indigo-200' : 'text-zinc-500'
+                              }`}
+                            >
+                              {formatTime(segDuration)}
+                            </span>
+                          )}
+                          {isActive && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Fullscreen Bottom HUD: Scrubber, Play, Seek, Speed Presets, Chapters, Volume, Exit */}
+              <div
+                onMouseEnter={() => setIsFsControlsHovered(true)}
+                onMouseLeave={() => setIsFsControlsHovered(false)}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                className={`absolute bottom-0 inset-x-0 z-30 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/75 to-transparent flex flex-col gap-3 transition-all duration-300 ${
+                  showFullscreenHud
+                    ? 'opacity-100 translate-y-0'
+                    : 'opacity-0 translate-y-4 pointer-events-none'
+                }`}
+              >
+                {/* Timeline Range Scrubber */}
+                <div className="space-y-1.5">
+                  <div className="relative flex items-center group">
+                    <input
+                      type="range"
+                      min={0}
+                      max={displayDuration || 100}
+                      value={displayCurrentTime}
+                      onChange={(e) => handleSeekToTime(Number(e.target.value))}
+                      className="w-full h-2 rounded-lg bg-zinc-700/80 accent-indigo-500 hover:accent-indigo-400 cursor-pointer transition-all"
+                      title="Scrub video timeline"
+                    />
+                    {/* Chapter marker ticks on scrubber bar */}
+                    {chapters.length > 0 && displayDuration > 0 && (
+                      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 pointer-events-none px-1">
+                        {chapters.map((chap) => {
+                          const leftPct = Math.min(
+                            100,
+                            Math.max(0, (chap.time / displayDuration) * 100)
+                          );
+                          return (
+                            <div
+                              key={`tick-${chap.id}`}
+                              className="absolute top-0 bottom-0 w-0.5 bg-white/40 rounded-full"
+                              style={{ left: `${leftPct}%` }}
+                              title={`${chap.timeFormatted} - ${chap.title}`}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs font-mono text-zinc-300 px-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-indigo-400 font-bold">{formatTime(displayCurrentTime)}</span>
+                      <span>/</span>
+                      <span>{displayDuration > 0 ? formatTime(displayDuration) : '--:--'}</span>
+                    </div>
+
+                    {currentActiveChapter && (
+                      <button
+                        onClick={() => setIsFsChaptersOpen(!isFsChaptersOpen)}
+                        className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white transition-colors max-w-xs sm:max-w-md truncate cursor-pointer"
+                        title="Click to view all chapters"
+                      >
+                        <Bookmark className="w-3 h-3 text-indigo-400" />
+                        <span className="truncate">{currentActiveChapter.title}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Control Action Buttons */}
+                <div className="flex items-center justify-between flex-wrap gap-2.5">
+                  {/* Left Controls: Play, Seek -10/+10, Chapters skip, Prev/Next lesson, Volume */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleTogglePlayPause}
+                      className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-md shadow-indigo-600/40 cursor-pointer"
+                      title={isPlayingLive ? 'Pause (Space or K)' : 'Play (Space or K)'}
+                    >
+                      {isPlayingLive ? (
+                        <Pause className="w-4 h-4 fill-white" />
+                      ) : (
+                        <Play className="w-4 h-4 fill-white" />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleSeekToTime(Math.max(0, currentPlaybackTime - 10))}
+                      className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-700/70 text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                      title="Seek -10s (J or Left Arrow)"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleSeekToTime(currentPlaybackTime + 10)}
+                      className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-700/70 text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                      title="Seek +10s (L or Right Arrow)"
+                    >
+                      <RotateCw className="w-4 h-4" />
+                    </button>
+
+                    {/* Lesson previous/next buttons */}
+                    {hasPrevious && onPreviousLesson && (
+                      <button
+                        onClick={onPreviousLesson}
+                        className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-700/70 text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                        title="Previous Lesson (P)"
+                      >
+                        <SkipBack className="w-4 h-4" />
+                      </button>
+                    )}
+                    {hasNext && onNextLesson && (
+                      <button
+                        onClick={onNextLesson}
+                        className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-700/70 text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                        title="Next Lesson (N)"
+                      >
+                        <SkipForward className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    {/* Volume Hover Control */}
+                    <div
+                      className="relative flex items-center"
+                      onMouseEnter={() => setIsVolumeHovered(true)}
+                      onMouseLeave={() => setIsVolumeHovered(false)}
+                    >
+                      <button
+                        onClick={handleToggleMute}
+                        className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-700/70 text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                        title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
+                      >
+                        {isMuted || volume === 0 ? (
+                          <VolumeX className="w-4 h-4 text-rose-400" />
+                        ) : volume < 50 ? (
+                          <Volume1 className="w-4 h-4" />
+                        ) : (
+                          <Volume2 className="w-4 h-4" />
+                        )}
+                      </button>
+
+                      <div
+                        className={`overflow-hidden transition-all duration-200 ease-out flex items-center ${
+                          isVolumeHovered
+                            ? 'w-24 max-w-[100px] opacity-100 ml-2'
+                            : 'w-0 max-w-0 opacity-0 pointer-events-none'
+                        }`}
+                      >
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={isMuted ? 0 : volume}
+                          onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                          className="w-20 h-1.5 rounded-lg bg-zinc-700/80 accent-indigo-500 hover:accent-indigo-400 cursor-pointer transition-all"
+                          title={`Volume: ${isMuted ? 0 : volume}%`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Controls: Speed Selector, Chapter Drawer Toggle, Exit Fullscreen */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Speed Presets */}
+                    <div className="flex items-center gap-1 font-mono bg-zinc-900/80 p-1 rounded-xl border border-zinc-700/70 backdrop-blur-md">
+                      <span className="text-[10px] text-zinc-400 uppercase font-sans font-semibold px-1.5 hidden md:inline">
+                        Speed
+                      </span>
+                      {SPEED_PRESETS.map((preset) => {
+                        const isCurrent = playbackRate === preset;
+                        return (
+                          <button
+                            key={`fs-${preset}`}
+                            onClick={() => handleSetPlaybackRate(preset)}
+                            className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                              isCurrent
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'text-zinc-400 hover:text-white hover:bg-zinc-800/80'
+                            }`}
+                            title={`Set speed ${preset}x ([ or ])`}
+                          >
+                            {preset}x
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Chapters Toggle Button */}
+                    {chapters.length > 0 && (
+                      <button
+                        onClick={() => setIsFsChaptersOpen(!isFsChaptersOpen)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer backdrop-blur-md ${
+                          isFsChaptersOpen
+                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/40'
+                            : 'bg-zinc-900/80 hover:bg-zinc-800/90 border-zinc-700/70 text-zinc-200 hover:text-white'
+                        }`}
+                        title="Video Chapters & Timelines (C)"
+                      >
+                        <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="hidden sm:inline">Chapters</span>
+                        <span className="font-mono text-[11px] text-zinc-400">
+                          ({chapters.length})
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Exit Fullscreen */}
+                    <button
+                      onClick={handleToggleFullscreen}
+                      className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-700/70 text-zinc-200 hover:text-white transition-colors cursor-pointer backdrop-blur-md"
+                      title="Exit Fullscreen (Esc or F)"
+                    >
+                      <Minimize2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
