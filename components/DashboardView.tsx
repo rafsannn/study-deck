@@ -118,19 +118,32 @@ export function DashboardView({
     <div className="w-full max-w-7xl mx-auto p-4 sm:p-8 space-y-8 animate-fade-in">
       {/* Top Banner / Hero Summary */}
       <div
-        className={`p-6 sm:p-8 rounded-3xl border transition-all ${
+        className={`relative overflow-hidden p-6 sm:p-8 rounded-3xl border transition-all duration-300 ${
           isDark
-            ? 'bg-gradient-to-br from-[#0c0c0e] via-[#111116] to-[#0c0c0e] border-zinc-800 shadow-2xl'
-            : 'bg-gradient-to-br from-white via-indigo-50/30 to-white border-zinc-200 shadow-sm'
+            ? 'bg-gradient-to-br from-[#0e0e12] via-[#121218] to-[#0c0c0e] border-white/[0.08] shadow-2xl'
+            : 'bg-gradient-to-br from-white via-indigo-50/40 to-white border-zinc-200/90 shadow-md'
         }`}
       >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2">
+        {/* Subtle ambient background glow */}
+        <div
+          className={`pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full blur-3xl opacity-20 ${
+            isDark ? 'bg-indigo-500' : 'bg-indigo-300'
+          }`}
+        />
+        <div
+          className={`pointer-events-none absolute -bottom-24 -left-24 w-80 h-80 rounded-full blur-3xl opacity-15 ${
+            isDark ? 'bg-emerald-500' : 'bg-emerald-300'
+          }`}
+        />
+
+        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-2.5">
             <div className="flex items-center gap-3">
-              <AppLogo size={42} className="w-10 h-10 shrink-0" />
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-mono font-medium">
+              <AppLogo size={42} className="w-10 h-10 shrink-0 drop-shadow-md" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-xs font-mono font-semibold shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Study Command Center</span>
+                <span>Command Center</span>
               </div>
             </div>
             <h2
@@ -141,19 +154,19 @@ export function DashboardView({
               Main Overview &amp; Learning Dashboard
             </h2>
             <p
-              className={`text-xs sm:text-sm max-w-xl ${
+              className={`text-xs sm:text-sm max-w-xl leading-relaxed ${
                 isDark ? 'text-zinc-400' : 'text-zinc-600'
               }`}
             >
-              Track daily study heatmap intensity, follow curated developer roadmaps, complete topic checklists, and manage multi-course tracks.
+              Track daily study heatmap intensity, follow curated developer roadmaps, complete topic checklists, and manage multi-course tracks with automatic progress saving.
             </p>
           </div>
 
           {/* Quick Actions */}
-          <div className="flex items-center flex-wrap gap-3">
+          <div className="relative flex items-center flex-wrap gap-2.5 sm:gap-3">
             <button
               onClick={onOpenImportModal}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Import Playlist</span>
@@ -162,10 +175,10 @@ export function DashboardView({
             {onOpenTargetEstimator && (
               <button
                 onClick={onOpenTargetEstimator}
-                className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer ${
                   isDark
-                    ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-indigo-300 hover:text-indigo-200'
-                    : 'bg-white hover:bg-zinc-100 border-zinc-200 text-indigo-700 shadow-sm'
+                    ? 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700 text-indigo-300 hover:text-indigo-200 shadow-sm'
+                    : 'bg-white hover:bg-zinc-100 border-zinc-200 text-indigo-700 shadow-xs'
                 }`}
                 title="Calculate Completion Date & Daily Goal"
               >
@@ -177,10 +190,10 @@ export function DashboardView({
             {resumeCourse && (
               <button
                 onClick={() => onSelectCourse(resumeCourse, resumeVideo?.videoId)}
-                className={`inline-flex items-center gap-2 px-5 py-3 rounded-2xl border text-xs font-semibold transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-2 px-5 py-3 rounded-2xl border text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer ${
                   isDark
-                    ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-zinc-200'
-                    : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-800 shadow-sm'
+                    ? 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700 text-zinc-100 shadow-sm'
+                    : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-800 shadow-xs'
                 }`}
               >
                 <Play className="w-3.5 h-3.5 fill-current text-emerald-500" />
@@ -190,23 +203,27 @@ export function DashboardView({
           </div>
         </div>
 
-        {/* Global Metric Counter Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4 mt-8">
+        {/* Global Living Metric Counter Cards */}
+        <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4 mt-8">
           {/* Total Watch Time Card */}
           <div
-            className={`p-4 rounded-2xl border transition-colors ${
-              isDark ? 'bg-zinc-900/60 border-zinc-800/80' : 'bg-white border-zinc-200/80 shadow-xs'
+            className={`p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+              isDark
+                ? 'bg-zinc-900/70 border-zinc-800 hover:border-sky-500/40'
+                : 'bg-white/90 border-zinc-200/90 hover:border-sky-400 shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
                 Watch Time
               </span>
-              <Clock className="w-4 h-4 text-sky-400" />
+              <div className="p-1.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+            <div className="mt-2.5 flex items-baseline gap-1.5 flex-wrap">
               <span
-                className={`text-2xl font-bold font-mono ${
+                className={`text-2xl font-bold font-mono tracking-tight ${
                   isDark ? 'text-zinc-100' : 'text-zinc-900'
                 }`}
               >
@@ -214,88 +231,112 @@ export function DashboardView({
               </span>
               <span className="text-[10px] text-zinc-500">Studied</span>
             </div>
-            <div className="mt-1 flex flex-col text-[11px] text-zinc-500 gap-0.5 font-mono">
-              <span>Total Required: <strong className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>{formatDurationHuman(totalRequiredSeconds)}</strong></span>
-              <span className="text-[10px] text-indigo-400 font-semibold">
+            <div className="mt-2 flex flex-col text-[11px] text-zinc-500 gap-0.5 font-mono pt-2 border-t border-zinc-800/30">
+              <span>Total: <strong className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>{formatDurationHuman(totalRequiredSeconds)}</strong></span>
+              <span className="text-[10px] text-sky-400 font-semibold">
                 {formatDurationHuman(totalRemainingSeconds)} remaining
-                {totalInProgressTopics > 0 && ` (${totalInProgressTopics} in-progress)`}
+                {totalInProgressTopics > 0 && ` (${totalInProgressTopics} in-prog)`}
               </span>
             </div>
           </div>
 
           {/* Topics Completed Card */}
           <div
-            className={`p-4 rounded-2xl border transition-colors ${
-              isDark ? 'bg-zinc-900/60 border-zinc-800/80' : 'bg-white border-zinc-200/80 shadow-xs'
+            className={`p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+              isDark
+                ? 'bg-zinc-900/70 border-zinc-800 hover:border-emerald-500/40'
+                : 'bg-white/90 border-zinc-200/90 hover:border-emerald-400 shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
                 Completed
               </span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold font-mono text-emerald-500">
+            <div className="mt-2.5 flex items-baseline gap-1.5">
+              <span className="text-2xl font-bold font-mono text-emerald-400 tracking-tight">
                 {totalCompletedTopics}
               </span>
               <span className="text-[10px] text-zinc-500">/ {totalTopics} Topics</span>
             </div>
-            <div
-              className={`mt-2 w-full h-1.5 rounded-full overflow-hidden ${
-                isDark ? 'bg-zinc-800' : 'bg-zinc-100'
-              }`}
-            >
+            <div className="mt-2 pt-2 border-t border-zinc-800/30">
+              <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+                <span className="text-zinc-500">Progress</span>
+                <span className="text-emerald-400 font-bold">{overallProgress}%</span>
+              </div>
               <div
-                className="h-full bg-emerald-500 rounded-full"
-                style={{ width: `${overallProgress}%` }}
-              />
+                className={`w-full h-1.5 rounded-full overflow-hidden ${
+                  isDark ? 'bg-zinc-800' : 'bg-zinc-100'
+                }`}
+              >
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                  style={{ width: `${overallProgress}%` }}
+                />
+              </div>
             </div>
           </div>
 
           {/* Active Streak Card */}
           <div
-            className={`p-4 rounded-2xl border transition-colors ${
-              isDark ? 'bg-zinc-900/60 border-zinc-800/80' : 'bg-white border-zinc-200/80 shadow-xs'
+            className={`p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+              isDark
+                ? 'bg-zinc-900/70 border-zinc-800 hover:border-amber-500/40'
+                : 'bg-white/90 border-zinc-200/90 hover:border-amber-400 shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
                 Streak
               </span>
-              <Flame className="w-4 h-4 text-amber-500" />
+              <div className="p-1.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <Flame className="w-3.5 h-3.5 animate-flame" />
+              </div>
             </div>
-            <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold font-mono text-amber-500">
+            <div className="mt-2.5 flex items-baseline gap-1.5">
+              <span className="text-2xl font-bold font-mono text-amber-400 tracking-tight">
                 {streakDays}
               </span>
               <span className="text-[10px] text-zinc-500">
                 {streakDays === 1 ? 'Day Active' : 'Days Active'}
               </span>
             </div>
+            <div className="mt-2 pt-2 border-t border-zinc-800/30 flex items-center gap-1 text-[10px] text-amber-400 font-medium">
+              <span>🔥 Keep momentum going!</span>
+            </div>
           </div>
 
           {/* Notes Taken Card */}
           <div
-            className={`p-4 rounded-2xl border transition-colors ${
-              isDark ? 'bg-zinc-900/60 border-zinc-800/80' : 'bg-white border-zinc-200/80 shadow-xs'
+            className={`p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+              isDark
+                ? 'bg-zinc-900/70 border-zinc-800 hover:border-indigo-500/40'
+                : 'bg-white/90 border-zinc-200/90 hover:border-indigo-400 shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
                 Key Notes
               </span>
-              <FileText className="w-4 h-4 text-indigo-400" />
+              <div className="p-1.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <FileText className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="mt-2 flex items-baseline gap-1.5">
+            <div className="mt-2.5 flex items-baseline gap-1.5">
               <span
-                className={`text-2xl font-bold font-mono ${
+                className={`text-2xl font-bold font-mono tracking-tight ${
                   isDark ? 'text-zinc-100' : 'text-zinc-900'
                 }`}
               >
                 {notesCount}
               </span>
-              <span className="text-[10px] text-zinc-500">Saved</span>
+              <span className="text-[10px] text-zinc-500">Saved Lessons</span>
+            </div>
+            <div className="mt-2 pt-2 border-t border-zinc-800/30 flex items-center gap-1 text-[10px] text-indigo-400 font-medium">
+              <span>Local notes auto-synced</span>
             </div>
           </div>
         </div>
@@ -375,8 +416,10 @@ export function DashboardView({
       {/* Quick Resume Hero (if courses exist) */}
       {(activeTab === 'overview' || activeTab === 'playlists') && resumeCourse && resumeVideo && (
         <div
-          className={`p-5 sm:p-6 rounded-3xl border transition-colors ${
-            isDark ? 'bg-[#0c0c0e] border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
+          className={`p-5 sm:p-6 rounded-3xl border transition-all duration-300 ${
+            isDark
+              ? 'bg-[#0c0c0e]/90 border-zinc-800/80 shadow-xl'
+              : 'bg-white border-zinc-200/90 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between mb-4">
@@ -385,12 +428,15 @@ export function DashboardView({
                 isDark ? 'text-zinc-400' : 'text-zinc-600'
               }`}
             >
-              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+              <div className="p-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
               <span>Continue Where You Left Off</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             </h3>
             <button
               onClick={() => onSelectCourse(resumeCourse, resumeVideo.videoId)}
-              className="text-xs text-indigo-500 hover:text-indigo-400 font-semibold inline-flex items-center gap-1 cursor-pointer"
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
             >
               <span>Open Studio</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -399,10 +445,10 @@ export function DashboardView({
 
           <div
             onClick={() => onSelectCourse(resumeCourse, resumeVideo.videoId)}
-            className={`flex flex-col md:flex-row items-start md:items-center gap-4 sm:gap-6 p-4 rounded-2xl border transition-all cursor-pointer group ${
+            className={`flex flex-col md:flex-row items-start md:items-center gap-4 sm:gap-6 p-4 rounded-2xl border transition-all duration-200 cursor-pointer group hover:-translate-y-0.5 ${
               isDark
-                ? 'bg-zinc-900/40 border-zinc-800/80 hover:border-indigo-500/50 hover:bg-zinc-900/80'
-                : 'bg-zinc-50 border-zinc-200/80 hover:border-indigo-300 hover:bg-zinc-100/80'
+                ? 'bg-zinc-900/40 border-zinc-800/80 hover:border-indigo-500/50 hover:bg-zinc-900/80 hover:shadow-lg'
+                : 'bg-zinc-50 border-zinc-200/80 hover:border-indigo-300 hover:bg-zinc-100/90 hover:shadow-md'
             }`}
           >
             <div className="w-full md:w-56 h-32 rounded-xl bg-zinc-800 relative overflow-hidden shrink-0 shadow-md">
@@ -410,12 +456,12 @@ export function DashboardView({
                 src={resumeVideo.thumbnail || resumeCourse.thumbnail}
                 alt={resumeVideo.title}
                 fill
-                className="object-cover group-hover:scale-105 transition-transform"
+                className="object-cover group-hover:scale-105 transition-transform duration-500"
                 referrerPolicy="no-referrer"
                 unoptimized
               />
               <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                <div className="w-11 h-11 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform duration-200">
                   <Play className="w-4 h-4 fill-white ml-0.5" />
                 </div>
               </div>
@@ -432,21 +478,21 @@ export function DashboardView({
 
             <div className="flex-1 min-w-0 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-medium">
+                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 font-semibold">
                   {resumeCourse.title}
                 </span>
                 <span className="text-[10px] text-zinc-500">
                   Topic {resumeVideo.position} of {resumeCourse.items.length}
                 </span>
                 {resumeVideoProgress && resumeVideoProgress.currentTime > 0 && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 font-semibold">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 font-semibold border border-sky-500/20">
                     {resumeVideoProgress.percent}% watched ({formatTime(resumeVideoProgress.currentTime)})
                   </span>
                 )}
               </div>
 
               <h4
-                className={`text-base sm:text-lg font-bold tracking-tight line-clamp-2 ${
+                className={`text-base sm:text-lg font-bold tracking-tight line-clamp-2 transition-colors ${
                   isDark ? 'text-zinc-100 group-hover:text-white' : 'text-zinc-900 group-hover:text-black'
                 }`}
               >
@@ -464,9 +510,10 @@ export function DashboardView({
                   e.stopPropagation();
                   onSelectCourse(resumeCourse, resumeVideo.videoId);
                 }}
-                className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors cursor-pointer"
+                className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/25 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer"
               >
-                Continue Now
+                <Play className="w-3.5 h-3.5 fill-current text-white" />
+                <span>Continue Now</span>
               </button>
             </div>
           </div>
@@ -583,14 +630,14 @@ export function DashboardView({
                 return (
                   <div
                     key={course.id}
-                    className={`flex flex-col rounded-2xl border transition-all overflow-hidden group ${
+                    className={`flex flex-col rounded-3xl border transition-all duration-300 overflow-hidden group hover:-translate-y-1.5 ${
                       isActive
                         ? isDark
-                          ? 'bg-zinc-900/80 border-indigo-500/50 ring-1 ring-indigo-500/40 shadow-xl'
-                          : 'bg-white border-indigo-300 ring-1 ring-indigo-200 shadow-md'
+                          ? 'bg-[#0f0f14] border-indigo-500/50 ring-1 ring-indigo-500/40 shadow-2xl shadow-indigo-950/40'
+                          : 'bg-white border-indigo-300 ring-1 ring-indigo-200 shadow-xl shadow-indigo-100'
                         : isDark
-                        ? 'bg-[#0c0c0e] border-zinc-800/80 hover:border-zinc-700 shadow-lg'
-                        : 'bg-white border-zinc-200 hover:border-zinc-300 shadow-xs'
+                        ? 'bg-[#0c0c0e]/90 border-zinc-800/80 hover:border-zinc-700 hover:shadow-2xl'
+                        : 'bg-white border-zinc-200/90 hover:border-zinc-300 hover:shadow-lg'
                     }`}
                   >
                     {/* Card Thumbnail Top */}
@@ -605,24 +652,27 @@ export function DashboardView({
                         }
                         alt={course.title}
                         fill
-                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
                         referrerPolicy="no-referrer"
                         unoptimized
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-between p-3.5">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent flex flex-col justify-between p-3.5">
                         <div className="flex items-center justify-between">
-                          {isActive && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500 text-black font-bold">
+                          {isActive ? (
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500 text-black font-bold shadow-md">
+                              <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
                               Active Track
                             </span>
+                          ) : (
+                            <span />
                           )}
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-black/80 text-zinc-200 ml-auto">
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-zinc-200 ml-auto border border-white/10">
                             {course.items.length} Lectures
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2 text-white">
-                          <div className="w-8 h-8 rounded-full bg-indigo-600/90 flex items-center justify-center shadow-md">
+                          <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-indigo-500 transition-all duration-200">
                             <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
                           </div>
                           <span className="text-xs font-semibold drop-shadow">
@@ -652,8 +702,8 @@ export function DashboardView({
 
                       {/* Progress Bar & Details */}
                       <div
-                        className={`space-y-2 pt-2 border-t ${
-                          isDark ? 'border-zinc-800/40' : 'border-zinc-100'
+                        className={`space-y-2.5 pt-3 border-t ${
+                          isDark ? 'border-zinc-800/60' : 'border-zinc-100'
                         }`}
                       >
                         <div className="flex items-center justify-between text-xs">
@@ -664,7 +714,7 @@ export function DashboardView({
                           >
                             {completedInCourse} / {course.items.length} Completed
                           </span>
-                          <span className="font-mono font-bold text-emerald-500">
+                          <span className="font-mono font-bold text-emerald-400">
                             {courseProgress}%
                           </span>
                         </div>
@@ -675,7 +725,7 @@ export function DashboardView({
                           }`}
                         >
                           <div
-                            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                             style={{ width: `${courseProgress}%` }}
                           />
                         </div>
@@ -693,13 +743,13 @@ export function DashboardView({
 
                       {/* Card Footer Actions */}
                       <div
-                        className={`flex items-center justify-between pt-2 border-t ${
-                          isDark ? 'border-zinc-800/40' : 'border-zinc-100'
+                        className={`flex items-center justify-between pt-3 border-t ${
+                          isDark ? 'border-zinc-800/60' : 'border-zinc-100'
                         }`}
                       >
                         <button
                           onClick={() => onSelectCourse(course)}
-                          className="text-xs font-semibold text-indigo-500 hover:text-indigo-400 inline-flex items-center gap-1 cursor-pointer"
+                          className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1 cursor-pointer transition-colors"
                         >
                           <span>Start Studying</span>
                           <ArrowRight className="w-3 h-3" />

@@ -415,13 +415,17 @@ export function StudyHeatmap({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
         {/* Weekly Minutes Progress */}
         <div
-          className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 ${
-            isDark ? 'bg-zinc-900/40 border-zinc-800/80' : 'bg-zinc-50 border-zinc-200'
+          className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+            isDark
+              ? 'bg-zinc-900/50 border-zinc-800/80 hover:border-sky-500/40'
+              : 'bg-zinc-50 border-zinc-200/90 hover:border-sky-400 shadow-xs'
           }`}
         >
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-sky-400" />
+              <div className="p-1 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
               <span>This Week&apos;s Time</span>
             </span>
             <span className="font-mono font-bold text-sky-400">
@@ -452,8 +456,10 @@ export function StudyHeatmap({
 
         {/* Weekly Topics Completed */}
         <div
-          className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 ${
-            isDark ? 'bg-zinc-900/40 border-zinc-800/80' : 'bg-zinc-50 border-zinc-200'
+          className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+            isDark
+              ? 'bg-zinc-900/50 border-zinc-800/80 hover:border-emerald-500/40'
+              : 'bg-zinc-50 border-zinc-200/90 hover:border-emerald-400 shadow-xs'
           }`}
         >
           <div className="flex items-center justify-between text-xs">
@@ -462,7 +468,9 @@ export function StudyHeatmap({
                 isDark ? 'text-zinc-400' : 'text-zinc-600'
               }`}
             >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              <div className="p-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              </div>
               <span>Topics Finished</span>
             </span>
             <span className="font-mono font-bold text-emerald-500">
@@ -493,13 +501,17 @@ export function StudyHeatmap({
 
         {/* Active Days this Week */}
         <div
-          className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 ${
-            isDark ? 'bg-zinc-900/40 border-zinc-800/80' : 'bg-zinc-50 border-zinc-200'
+          className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+            isDark
+              ? 'bg-zinc-900/50 border-zinc-800/80 hover:border-amber-500/40'
+              : 'bg-zinc-50 border-zinc-200/90 hover:border-amber-400 shadow-xs'
           }`}
         >
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Flame className="w-3.5 h-3.5 text-amber-500" />
+              <div className="p-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <Flame className="w-3.5 h-3.5 animate-flame" />
+              </div>
               <span>Active Consistency</span>
             </span>
             <span className="text-xs font-mono text-amber-500 font-bold">

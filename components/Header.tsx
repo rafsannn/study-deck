@@ -58,17 +58,17 @@ export function Header({
 
   return (
     <header
-      className={`h-14 sm:h-16 border-b flex items-center justify-between px-3.5 sm:px-6 backdrop-blur-md shrink-0 sticky top-0 z-40 transition-colors duration-200 ${
+      className={`h-14 sm:h-16 border-b flex items-center justify-between px-3.5 sm:px-6 backdrop-blur-xl shrink-0 sticky top-0 z-40 transition-all duration-300 ${
         isDark
-          ? 'border-zinc-800/80 bg-[#09090b]/90'
-          : 'border-zinc-200/80 bg-white/90'
+          ? 'border-white/[0.08] bg-[#09090b]/80 shadow-[0_4px_24px_rgba(0,0,0,0.4)]'
+          : 'border-zinc-200/80 bg-white/85 shadow-[0_4px_20px_rgba(0,0,0,0.03)]'
       }`}
     >
       {/* App Identity & Brand Title (Clickable -> Returns to Main Dashboard) */}
-      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+      <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
         <div
           onClick={onGoToDashboard}
-          className="flex items-center gap-2.5 cursor-pointer group select-none transition-transform active:scale-[0.99] min-w-0"
+          className="flex items-center gap-2.5 cursor-pointer group select-none transition-all duration-200 hover:opacity-95 active:scale-[0.98] min-w-0"
           title="Go to Main Dashboard"
           role="button"
           tabIndex={0}
@@ -79,8 +79,8 @@ export function Header({
             }
           }}
         >
-          <div className="flex items-center justify-center shrink-0">
-            <AppLogo size={32} className="w-8 h-8 group-hover:scale-105 transition-transform" />
+          <div className="flex items-center justify-center shrink-0 p-1 rounded-xl group-hover:scale-105 transition-transform duration-200">
+            <AppLogo size={32} className="w-8 h-8" />
           </div>
           <div className="flex items-center gap-2 min-w-0">
             <h1
@@ -92,9 +92,15 @@ export function Header({
             >
               Study Deck
             </h1>
-            {isDashboard && (
-              <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-medium">
-                Dashboard
+            {isDashboard ? (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 font-semibold shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                <span>Dashboard</span>
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-semibold shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Studio</span>
               </span>
             )}
           </div>
@@ -102,22 +108,22 @@ export function Header({
 
         {/* Course Track Quick Selector (Visible when inside a course) */}
         {!isDashboard && allCourses.length > 0 && currentCourse && (
-          <div className="hidden lg:flex items-center pl-2 border-l border-zinc-700/40">
+          <div className="hidden lg:flex items-center pl-2.5 border-l border-zinc-700/40">
             <div
-              className={`relative flex items-center border rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`relative flex items-center border rounded-xl px-2.5 py-1 text-xs font-medium transition-all duration-200 hover:border-zinc-600 ${
                 isDark
-                  ? 'bg-zinc-900/90 border-zinc-800 text-zinc-300'
+                  ? 'bg-zinc-900/90 border-zinc-800 text-zinc-300 shadow-inner'
                   : 'bg-zinc-100/90 border-zinc-200 text-zinc-700'
               }`}
             >
-              <Layers className="w-3 h-3 mr-1.5 opacity-60 shrink-0" />
+              <Layers className="w-3.5 h-3.5 mr-1.5 text-indigo-400 shrink-0" />
               <select
                 value={currentCourse.id}
                 onChange={(e) => {
                   const selected = allCourses.find((c) => c.id === e.target.value);
                   if (selected) onSelectCourse(selected);
                 }}
-                className="bg-transparent text-xs focus:outline-none cursor-pointer appearance-none pr-5 max-w-[160px] truncate"
+                className="bg-transparent text-xs focus:outline-none cursor-pointer appearance-none pr-5 max-w-[170px] truncate font-medium"
                 title="Switch Course Track"
               >
                 {allCourses.map((course) => (
@@ -130,7 +136,7 @@ export function Header({
                   </option>
                 ))}
               </select>
-              <span className="pointer-events-none absolute right-2 text-[8px] opacity-50">▼</span>
+              <span className="pointer-events-none absolute right-2 text-[8px] opacity-60">▼</span>
             </div>
           </div>
         )}
@@ -142,14 +148,14 @@ export function Header({
         {!isDashboard && (
           <button
             onClick={onGoToDashboard}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer ${
               isDark
-                ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300 hover:text-white'
-                : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-700 hover:text-zinc-900'
+                ? 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-800 text-zinc-200 hover:text-white hover:border-zinc-700'
+                : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-700 hover:text-zinc-900 shadow-xs'
             }`}
             title="View Dashboard"
           >
-            <LayoutDashboard className="w-3.5 h-3.5" />
+            <LayoutDashboard className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden md:inline">Dashboard</span>
           </button>
         )}
@@ -159,10 +165,10 @@ export function Header({
           <button
             id="target-estimator-btn"
             onClick={onOpenTargetEstimator}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer ${
               isDark
-                ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-indigo-300 hover:text-indigo-200'
-                : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-indigo-700 hover:text-indigo-800'
+                ? 'bg-indigo-950/40 hover:bg-indigo-900/50 border-indigo-500/30 text-indigo-300 hover:text-indigo-200 hover:border-indigo-500/50'
+                : 'bg-indigo-50/70 hover:bg-indigo-100/80 border-indigo-200 text-indigo-700 hover:text-indigo-800'
             }`}
             title="Daily Target & Pace Estimator"
             aria-label="Daily Target & Pace Estimator"
@@ -172,25 +178,25 @@ export function Header({
           </button>
         )}
 
-        {/* Streamlined Single-Line Streak & Progress Chip */}
+        {/* Streamlined Living Single-Line Streak & Progress Chip */}
         <div
           onClick={onOpenStatsModal}
-          className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border cursor-pointer transition-all ${
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border cursor-pointer transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] ${
             isDark
-              ? 'bg-zinc-900/70 border-zinc-800 hover:border-zinc-700 text-zinc-300'
-              : 'bg-zinc-100/80 border-zinc-200 hover:border-zinc-300 text-zinc-700'
+              ? 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700 text-zinc-300 shadow-sm'
+              : 'bg-zinc-100/90 border-zinc-200 hover:border-zinc-300 text-zinc-700 shadow-xs'
           }`}
           title="Click to view full analytics & statistics"
           role="button"
           tabIndex={0}
         >
-          <span className="flex items-center gap-1 text-xs font-bold text-amber-500 font-mono">
-            <span>🔥</span>
+          <span className="flex items-center gap-1 text-xs font-bold text-amber-400 font-mono">
+            <span className="animate-flame inline-block">🔥</span>
             <span>{streakCount}d</span>
           </span>
           <span className={`w-px h-3.5 ${isDark ? 'bg-zinc-800' : 'bg-zinc-300'}`} />
-          <span className="flex items-center gap-1 text-xs font-bold text-emerald-500 font-mono">
-            <BarChart3 className="w-3 h-3 text-emerald-500" />
+          <span className="flex items-center gap-1 text-xs font-bold text-emerald-400 font-mono">
+            <BarChart3 className="w-3 h-3 text-emerald-400" />
             <span>{progressPercent}%</span>
           </span>
           {timeString && (
@@ -210,7 +216,7 @@ export function Header({
         <button
           id="import-playlist-btn"
           onClick={onOpenImportModal}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-semibold shadow-md shadow-indigo-600/25 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer"
           title="Import YouTube Playlist"
         >
           <Plus className="w-3.5 h-3.5 shrink-0" />
@@ -222,9 +228,9 @@ export function Header({
           <button
             id="shortcuts-btn"
             onClick={onOpenShortcuts}
-            className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border text-xs transition-colors cursor-pointer ${
+            className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border text-xs transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer ${
               isDark
-                ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
                 : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-600 hover:text-zinc-900'
             }`}
             title="Keyboard Shortcuts (?)"
@@ -238,9 +244,9 @@ export function Header({
         <button
           id="theme-toggle-btn"
           onClick={onToggleTheme}
-          className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border text-xs transition-colors cursor-pointer ${
+          className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border text-xs transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer ${
             isDark
-              ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-amber-400 hover:text-amber-300'
+              ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-amber-400 hover:text-amber-300 hover:border-zinc-700'
               : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-700 hover:text-zinc-900'
           }`}
           title={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}

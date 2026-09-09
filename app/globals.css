@@ -1,1 +1,89 @@
 @import "tailwindcss";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.45);
+}
+
+/* Living animations & micro-interactions */
+@keyframes flame-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.4));
+  }
+  50% {
+    transform: scale(1.12) rotate(-3deg);
+    filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.75)) drop-shadow(0 0 16px rgba(239, 68, 68, 0.4));
+  }
+}
+
+@keyframes live-bar-1 {
+  0%, 100% { height: 4px; }
+  50% { height: 14px; }
+}
+
+@keyframes live-bar-2 {
+  0%, 100% { height: 12px; }
+  50% { height: 5px; }
+}
+
+@keyframes live-bar-3 {
+  0%, 100% { height: 6px; }
+  50% { height: 16px; }
+}
+
+@keyframes subtle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-flame {
+  animation: flame-pulse 2.2s ease-in-out infinite;
+}
+
+.animate-equalizer-1 {
+  animation: live-bar-1 1s ease-in-out infinite;
+}
+
+.animate-equalizer-2 {
+  animation: live-bar-2 0.85s ease-in-out infinite 0.15s;
+}
+
+.animate-equalizer-3 {
+  animation: live-bar-3 1.1s ease-in-out infinite 0.3s;
+}
+
+.animate-float {
+  animation: subtle-float 4s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer-sweep 2.5s ease-in-out infinite;
+}

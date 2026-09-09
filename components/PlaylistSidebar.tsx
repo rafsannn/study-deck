@@ -592,21 +592,25 @@ export function PlaylistSidebar({
                   key={item.id || item.videoId}
                   id={`lesson-item-${item.videoId}`}
                   onClick={() => onSelectVideo(item)}
-                  className={`p-2.5 sm:p-3 rounded-xl flex items-center gap-2.5 sm:gap-3 relative cursor-pointer transition-colors ${
+                  className={`p-2.5 sm:p-3 rounded-xl flex items-center gap-2.5 sm:gap-3 relative cursor-pointer transition-all border-l-[3px] border-l-indigo-500 ${
                     isDark
-                      ? 'bg-indigo-500/10 border border-indigo-500/30 ring-1 ring-indigo-500/50'
-                      : 'bg-indigo-50/90 border border-indigo-200 ring-1 ring-indigo-300 shadow-xs'
+                      ? 'bg-indigo-950/25 border-y border-r border-indigo-500/25 ring-1 ring-indigo-500/30 shadow-sm shadow-indigo-950/50'
+                      : 'bg-indigo-50/70 border-y border-r border-indigo-200 ring-1 ring-indigo-200/60 shadow-xs'
                   }`}
                 >
-                  {/* Sequence Number Column - Active Play Icon */}
-                  <div className="w-5 sm:w-6 shrink-0 flex items-center justify-center text-xs font-mono select-none">
-                    <Play
-                      className={`w-3.5 h-3.5 fill-current ${
-                        isDark ? 'text-indigo-400' : 'text-indigo-600'
-                      }`}
-                    />
+                  {/* Sequence Column - Refined Single Living Equalizer */}
+                  <div
+                    className="w-5 sm:w-6 shrink-0 flex items-center justify-center select-none"
+                    title={`Playing Lesson ${sequenceNumber}`}
+                  >
+                    <div className="flex items-end justify-center gap-0.5 h-3.5 w-3.5">
+                      <span className="w-1 bg-indigo-400 rounded-full animate-equalizer-1" />
+                      <span className="w-1 bg-indigo-300 rounded-full animate-equalizer-2" />
+                      <span className="w-1 bg-indigo-400 rounded-full animate-equalizer-3" />
+                    </div>
                   </div>
 
+                  {/* Thumbnail - Crisp, Unobscured with Clean Duration & Progress */}
                   <div className="w-24 h-14 bg-zinc-800 rounded-lg shrink-0 flex items-center justify-center relative overflow-hidden">
                     <Image
                       src={item.thumbnail || `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`}
@@ -616,16 +620,14 @@ export function PlaylistSidebar({
                       referrerPolicy="no-referrer"
                       unoptimized
                     />
-                    <div className="absolute inset-0 bg-indigo-950/60 flex items-center justify-center text-indigo-300">
-                      <Volume2 className="w-4 h-4 animate-bounce" />
-                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
                     {item.duration && (
-                      <div className="absolute bottom-1 right-1 bg-black/80 text-[8px] px-1 rounded font-mono text-zinc-200">
+                      <div className="absolute bottom-1 right-1 bg-black/80 text-[8px] px-1 rounded font-mono text-zinc-200 z-10">
                         {formatDisplayDuration(item.duration)}
                       </div>
                     )}
                     {/* Watch Progress Sub-bar inside thumbnail */}
-                    <div className="absolute bottom-0 inset-x-0 h-1 bg-black/50">
+                    <div className="absolute bottom-0 inset-x-0 h-1 bg-black/50 z-10">
                       <div
                         className={`h-full ${watchPercent >= 100 ? 'bg-emerald-400' : 'bg-indigo-400'}`}
                         style={{ width: `${watchPercent}%` }}
@@ -643,7 +645,10 @@ export function PlaylistSidebar({
                       {item.title}
                     </span>
                     <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
-                      <span className="text-indigo-400 font-bold uppercase tracking-wider">Active Now</span>
+                      <span className="inline-flex items-center gap-1.5 text-indigo-400 font-bold uppercase tracking-wider text-[9px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Now Playing</span>
+                      </span>
                       <span className="text-zinc-500">•</span>
                       <span className="font-mono text-indigo-300 font-medium">
                         {watchPercent}% watched
