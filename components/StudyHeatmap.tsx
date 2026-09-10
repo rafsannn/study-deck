@@ -18,12 +18,12 @@ import {
   Award,
 } from 'lucide-react';
 import { UserStudyData, WeeklyStudyGoal, DailyActivityRecord } from '@/types/playlist';
-import { formatDurationHuman } from '@/lib/utils';
+import { formatDurationHuman, getLocalDateString, getYesterdayDateString } from '@/lib/utils';
 
 interface StudyHeatmapProps {
   studyData: UserStudyData;
   onUpdateWeeklyGoal?: (goal: WeeklyStudyGoal) => void;
-  onLogStudySession?: (date: string, minutes: number, topics: number) => void;
+  onLogStudySession?: (date: string, minutes: number, topics: number, mode?: 'add' | 'set') => void;
   theme?: 'dark' | 'light';
 }
 
@@ -65,49 +65,15 @@ export function StudyHeatmap({
   const [showLogModal, setShowLogModal] = useState(false);
   const [logMinutes, setLogMinutes] = useState(30);
   const [logTopics, setLogTopics] = useState(1);
-  const [logDate, setLogDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [logDate, setLogDate] = useState(() => getLocalDateString());
+  const [logMode, setLogMode] = useState<'set' | 'add'>('set');
 
-  // Pre-aggregate watch progress history into activity if needed
+  // Pure activity map: strictly reflect real logged study records without artificial inflation
   const combinedActivityMap = useMemo(() => {
-    const map: Record<string, DailyActivityRecord> = {
+    return {
       ...(studyData.dailyActivity || {}),
     };
-
-    // If streak exists and has lastActiveDate, ensure today or streak date is represented
-    if (studyData.streak?.lastActiveDate && !map[studyData.streak.lastActiveDate]) {
-      map[studyData.streak.lastActiveDate] = {
-        minutes: 25,
-        seconds: 1500,
-        topics: 0,
-      };
-    }
-
-    // Auto-extract dates from videoProgress lastWatchedAt to ensure unfinished watch time is represented
-    if (studyData.videoProgress) {
-      Object.entries(studyData.videoProgress).forEach(([_, p]) => {
-        if (p.lastWatchedAt && p.currentTime > 0) {
-          const d = p.lastWatchedAt.slice(0, 10);
-          const currentMins = Math.max(1, Math.round(p.currentTime / 60));
-          if (!map[d]) {
-            map[d] = {
-              minutes: currentMins,
-              seconds: p.currentTime,
-              topics: 0, // Topic completions strictly come from dailyActivity, not watch progress
-            };
-          } else {
-            // Keep the maximum of recorded activity minutes or watched progress minutes for that date
-            map[d] = {
-              ...map[d],
-              minutes: Math.max(map[d].minutes || 0, currentMins),
-              seconds: Math.max(map[d].seconds || (map[d].minutes * 60) || 0, p.currentTime),
-            };
-          }
-        }
-      });
-    }
-
-    return map;
-  }, [studyData.dailyActivity, studyData.streak, studyData.videoProgress]);
+  }, [studyData.dailyActivity]);
 
   // Compute 52 weeks of history (364 days / 1 full year) ending on the current week Saturday
   const { weeks, totalMinutesPastYear, activeDaysCount, maxDailyMinutes } = useMemo(() => {
@@ -116,8 +82,8 @@ export function StudyHeatmap({
     const currentDay = today.getDay(); // 0 is Sun, 6 is Sat
     const daysUntilSaturday = 6 - currentDay;
 
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + daysUntilSaturday);
+    const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    endDate.setDate(endDate.getDate() + daysUntilSaturday);
 
     const totalWeeks = 52; // 52 weeks of rich GitHub-style 1-year matrix
     const totalDays = totalWeeks * 7;
@@ -134,7 +100,7 @@ export function StudyHeatmap({
     const tempDate = new Date(startDate);
 
     for (let i = 0; i < totalDays; i++) {
-      const dateStr = tempDate.toISOString().slice(0, 10);
+      const dateStr = getLocalDateString(tempDate);
       const activity = combinedActivityMap[dateStr];
       const minutes = activity?.minutes || 0;
       const topics = activity?.topics || 0;
@@ -188,11 +154,9 @@ export function StudyHeatmap({
 
   // Current Week Calculation
   const currentWeekMetrics = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
     const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
-    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Sunday
 
     let weekMinutes = 0;
     let weekTopics = 0;
@@ -201,7 +165,7 @@ export function StudyHeatmap({
     for (let d = 0; d < 7; d++) {
       const temp = new Date(startOfWeek);
       temp.setDate(startOfWeek.getDate() + d);
-      const str = temp.toISOString().slice(0, 10);
+      const str = getLocalDateString(temp);
       const act = combinedActivityMap[str];
       if (act) {
         weekMinutes += act.minutes || 0;
@@ -259,11 +223,16 @@ export function StudyHeatmap({
     setIsEditingGoal(false);
   };
 
-  // Submit manual session log
+  // Submit manual session log / time adjustment
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (onLogStudySession) {
-      onLogStudySession(logDate, Number(logMinutes) || 0, Number(logTopics) || 0);
+      onLogStudySession(
+        logDate,
+        Math.max(0, Number(logMinutes) || 0),
+        Math.max(0, Number(logTopics) || 0),
+        logMode
+      );
     }
     setShowLogModal(false);
   };
@@ -532,9 +501,9 @@ export function StudyHeatmap({
           <div className="flex items-center justify-between gap-1 pt-1">
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((dayChar, dIdx) => {
               const now = new Date();
-              const startOfWeek = new Date(now);
-              startOfWeek.setDate(now.getDate() - now.getDay() + dIdx);
-              const dateStr = startOfWeek.toISOString().slice(0, 10);
+              const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + dIdx);
+              const dateStr = getLocalDateString(startOfWeek);
               const act = combinedActivityMap[dateStr];
               const hasAct = (act?.minutes || 0) > 0 || (act?.topics || 0) > 0;
 
@@ -655,8 +624,7 @@ export function StudyHeatmap({
                     <g key={wIdx}>
                       {week.map((day, dIdx) => {
                         const rowY = topMargin + dIdx * step;
-                        const isToday =
-                          day.dateStr === new Date().toISOString().slice(0, 10);
+                        const isToday = day.dateStr === getLocalDateString();
 
                         // Determine colors based on intensity
                         let fill = isDark ? '#18181b' : '#e4e4e7';
@@ -701,7 +669,14 @@ export function StudyHeatmap({
                               fill={fill}
                               stroke={stroke}
                               strokeWidth={0.8}
-                              className="cursor-pointer transition-opacity hover:opacity-80"
+                              className="cursor-pointer transition-transform hover:scale-125 hover:opacity-90 origin-center"
+                              onClick={() => {
+                                setLogDate(day.dateStr);
+                                setLogMinutes(day.minutes);
+                                setLogTopics(day.topics);
+                                setLogMode('set');
+                                setShowLogModal(true);
+                              }}
                               onMouseEnter={(e) => {
                                 setHoveredCell(day);
                                 const rect = e.currentTarget.getBoundingClientRect();
@@ -732,7 +707,7 @@ export function StudyHeatmap({
             }`}
           >
             <div className="flex items-center gap-2">
-              <span>Learn every day to maintain streak</span>
+              <span>Learn every day to maintain streak • Click any cell to view or edit</span>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -779,19 +754,31 @@ export function StudyHeatmap({
             pointerEvents: 'none',
             zIndex: 9999,
           }}
-          className={`p-2.5 rounded-xl border text-xs shadow-2xl space-y-1 min-w-[160px] animate-fade-in ${
+          className={`p-3 rounded-xl border text-xs shadow-2xl space-y-1.5 min-w-[180px] animate-fade-in ${
             isDark
               ? 'bg-zinc-900 border-zinc-700 text-zinc-100 shadow-black/80'
               : 'bg-white border-zinc-300 text-zinc-900 shadow-xl'
           }`}
         >
-          <div className="font-bold font-mono text-[11px] text-zinc-400">
-            {hoveredCell.dateObj.toLocaleDateString(undefined, {
-              weekday: 'short',
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}
+          <div className="flex items-center justify-between gap-2 border-b pb-1 border-zinc-800/40">
+            <span className="font-bold font-mono text-[11px] text-zinc-400">
+              {hoveredCell.dateObj.toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+            </span>
+            {hoveredCell.dateStr === getLocalDateString() && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400">
+                Today
+              </span>
+            )}
+            {hoveredCell.dateStr === getYesterdayDateString() && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-700/40 text-zinc-400">
+                Yesterday
+              </span>
+            )}
           </div>
 
           <div className="flex items-center justify-between gap-3 text-xs">
@@ -810,19 +797,13 @@ export function StudyHeatmap({
             </span>
           </div>
 
-          {hoveredCell.intensityLevel >= 3 && (
-            <div
-              className={`text-[10px] text-amber-400 font-semibold pt-0.5 border-t ${
-                isDark ? 'border-zinc-800' : 'border-zinc-200'
-              }`}
-            >
-              🔥 High Intensity Session!
-            </div>
-          )}
+          <div className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/40 flex items-center gap-1">
+            <span>💡 Click to view or adjust hours</span>
+          </div>
         </div>
       )}
 
-      {/* Manual Study Session Log Modal */}
+      {/* Manual Study Session Log / Adjustment Modal */}
       {showLogModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div
@@ -837,24 +818,127 @@ export function StudyHeatmap({
                 isDark ? 'border-zinc-800' : 'border-zinc-200'
               }`}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                  <Plus className="w-4 h-4" />
+                  <Calendar className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold tracking-tight">Log Practice / Study Session</h4>
-                  <p className="text-[11px] text-zinc-500">Add to your consistency heatmap</p>
+                  <h4 className="text-sm font-bold tracking-tight">Adjust / Log Study Time</h4>
+                  <p className="text-[11px] text-zinc-500">
+                    Fix inflated time, restore missed sessions, or record offline work
+                  </p>
                 </div>
               </div>
             </div>
 
-            <form onSubmit={handleLogSubmit} className="space-y-3">
+            {/* Quick Date Switcher Pills */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-zinc-400">Quick Date:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const today = getLocalDateString();
+                  setLogDate(today);
+                  const cur = combinedActivityMap[today];
+                  if (cur) {
+                    setLogMinutes(cur.minutes);
+                    setLogTopics(cur.topics);
+                    setLogMode('set');
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                  logDate === getLocalDateString()
+                    ? 'bg-indigo-600 text-white font-semibold'
+                    : isDark
+                    ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300'
+                    : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const yest = getYesterdayDateString();
+                  setLogDate(yest);
+                  const cur = combinedActivityMap[yest];
+                  if (cur) {
+                    setLogMinutes(cur.minutes);
+                    setLogTopics(cur.topics);
+                    setLogMode('set');
+                  } else {
+                    setLogMinutes(30);
+                    setLogTopics(1);
+                    setLogMode('set');
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                  logDate === getYesterdayDateString()
+                    ? 'bg-indigo-600 text-white font-semibold'
+                    : isDark
+                    ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300'
+                    : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                }`}
+              >
+                Yesterday
+              </button>
+            </div>
+
+            {/* Current status on this date */}
+            {combinedActivityMap[logDate] && (
+              <div
+                className={`p-2.5 rounded-xl border text-xs flex items-center justify-between ${
+                  isDark ? 'bg-zinc-900/60 border-zinc-800 text-zinc-300' : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                }`}
+              >
+                <span className="text-[11px] text-zinc-400">Recorded for this day:</span>
+                <span className="font-mono font-bold text-sky-400">
+                  {formatDurationHuman((combinedActivityMap[logDate]?.minutes || 0) * 60)} • {combinedActivityMap[logDate]?.topics || 0} topics
+                </span>
+              </div>
+            )}
+
+            {/* Mode selection: Set exact vs Add */}
+            <div className="flex rounded-xl p-1 bg-zinc-900 border border-zinc-800 gap-1">
+              <button
+                type="button"
+                onClick={() => setLogMode('set')}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-lg cursor-pointer transition-all ${
+                  logMode === 'set'
+                    ? 'bg-emerald-600 text-white font-semibold shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Set Exact Time (Correct/Replace)
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogMode('add')}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-lg cursor-pointer transition-all ${
+                  logMode === 'add'
+                    ? 'bg-emerald-600 text-white font-semibold shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                + Add Time to Day
+              </button>
+            </div>
+
+            <form onSubmit={handleLogSubmit} className="space-y-3.5">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-300">Session Date</label>
+                <label className="text-xs font-medium text-zinc-300">Date</label>
                 <input
                   type="date"
                   value={logDate}
-                  onChange={(e) => setLogDate(e.target.value)}
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    setLogDate(newDate);
+                    const cur = combinedActivityMap[newDate];
+                    if (cur && logMode === 'set') {
+                      setLogMinutes(cur.minutes);
+                      setLogTopics(cur.topics);
+                    }
+                  }}
                   className={`w-full text-xs font-mono p-2.5 rounded-xl border focus:outline-none ${
                     isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-zinc-50 border-zinc-300 text-zinc-900'
                   }`}
@@ -862,52 +946,98 @@ export function StudyHeatmap({
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-300">Minutes Studied</label>
-                <input
-                  type="number"
-                  min="5"
-                  max="720"
-                  step="5"
-                  value={logMinutes}
-                  onChange={(e) => setLogMinutes(parseInt(e.target.value) || 0)}
-                  className={`w-full text-xs font-mono p-2.5 rounded-xl border focus:outline-none ${
-                    isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-zinc-50 border-zinc-300 text-zinc-900'
-                  }`}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-300">Topics / Problems Mastered</label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-zinc-300">
+                    {logMode === 'set' ? 'Total Minutes on this Date' : 'Minutes to Add'}
+                  </label>
+                  <span className="text-[11px] font-mono text-sky-400">
+                    {formatDurationHuman(logMinutes * 60)}
+                  </span>
+                </div>
                 <input
                   type="number"
                   min="0"
-                  max="30"
+                  max="1440"
+                  step="5"
+                  value={logMinutes}
+                  onChange={(e) => setLogMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                  className={`w-full text-xs font-mono p-2.5 rounded-xl border focus:outline-none ${
+                    isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-zinc-50 border-zinc-300 text-zinc-900'
+                  }`}
+                  required
+                />
+
+                {/* Quick Minute Preset Buttons */}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <span className="text-[10px] text-zinc-500 font-mono">Presets:</span>
+                  {[15, 30, 45, 60, 90, 120].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setLogMinutes(mins)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer ${
+                        logMinutes === mins
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 font-bold'
+                          : isDark
+                          ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800'
+                          : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border border-zinc-200'
+                      }`}
+                    >
+                      {mins}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-300">
+                  {logMode === 'set' ? 'Total Topics Mastered' : 'Topics Mastered to Add'}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
                   value={logTopics}
-                  onChange={(e) => setLogTopics(parseInt(e.target.value) || 0)}
+                  onChange={(e) => setLogTopics(Math.max(0, parseInt(e.target.value) || 0))}
                   className={`w-full text-xs font-mono p-2.5 rounded-xl border focus:outline-none ${
                     isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-zinc-50 border-zinc-300 text-zinc-900'
                   }`}
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowLogModal(false)}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-medium cursor-pointer ${
-                    isDark ? 'border-zinc-800 text-zinc-400' : 'border-zinc-300 text-zinc-600'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer shadow-sm"
-                >
-                  Save to Heatmap
-                </button>
+              <div className="flex items-center justify-between pt-3 border-t border-zinc-800/40">
+                {combinedActivityMap[logDate] && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onLogStudySession) {
+                        onLogStudySession(logDate, 0, 0, 'set');
+                      }
+                      setShowLogModal(false);
+                    }}
+                    className="text-[11px] text-rose-400 hover:text-rose-300 underline cursor-pointer"
+                  >
+                    Clear Day (0 mins)
+                  </button>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => setShowLogModal(false)}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-medium cursor-pointer ${
+                      isDark ? 'border-zinc-800 text-zinc-400' : 'border-zinc-300 text-zinc-600'
+                    }`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer shadow-sm"
+                  >
+                    Save Changes
+                  </button>
+                </div>
               </div>
             </form>
           </div>

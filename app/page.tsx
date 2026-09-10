@@ -19,7 +19,7 @@ import {
   UserStudyData,
   VideoWatchProgress,
 } from '@/types/playlist';
-import { parseDurationToSeconds } from '@/lib/utils';
+import { parseDurationToSeconds, getLocalDateString } from '@/lib/utils';
 
 const STORAGE_KEY = 'rafsan_study_deck_data_v2';
 const THEME_STORAGE_KEY = 'rafsan_study_deck_theme';
@@ -319,6 +319,18 @@ export default function StudyDeckPage() {
     notifyStoreListeners();
   }, []);
 
+  // Atomic state updater that reads from memoryState directly to eliminate stale closure races
+  const updateStudyData = useCallback((updater: (prev: UserStudyData) => UserStudyData) => {
+    const nextData = updater(memoryState);
+    memoryState = nextData;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
+    } catch (e) {
+      console.error('Error saving study deck data:', e);
+    }
+    notifyStoreListeners();
+  }, []);
+
   // Auto-backfill missing video durations for saved playlists
   useEffect(() => {
     const playlists = studyData.customPlaylists || [];
@@ -428,6 +440,11 @@ export default function StudyDeckPage() {
     return currentCompletedVideos.includes(activeVideo.videoId);
   }, [activeVideo, currentCompletedVideos]);
 
+  const currentCourseRef = React.useRef<PlaylistCourse | null>(currentCourse);
+  useEffect(() => {
+    currentCourseRef.current = currentCourse;
+  }, [currentCourse]);
+
   // Confetti trigger
   const fireConfetti = useCallback(() => {
     try {
@@ -445,61 +462,64 @@ export default function StudyDeckPage() {
   // Action: Select video
   const handleSelectVideo = useCallback(
     (video: PlaylistItem) => {
-      const updated: UserStudyData = {
-        ...studyData,
+      updateStudyData((prev) => ({
+        ...prev,
         activeVideoId: video.videoId,
         lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+      }));
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
-  // Streak updating helper
+  // Streak updating helper using user's local calendar dates
   const updateStreakOnActivity = useCallback((prevStreak: { count: number; lastActiveDate: string }) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
     if (!prevStreak.lastActiveDate) {
       return { count: 1, lastActiveDate: today };
     }
     if (prevStreak.lastActiveDate === today) {
       return prevStreak;
     }
-    const lastTime = new Date(prevStreak.lastActiveDate).getTime();
-    const currTime = new Date(today).getTime();
-    const diffDays = Math.round((currTime - lastTime) / (1000 * 60 * 60 * 24));
+    const [lastY, lastM, lastD] = prevStreak.lastActiveDate.split('-').map(Number);
+    const [currY, currM, currD] = today.split('-').map(Number);
+    const lastDate = new Date(lastY, lastM - 1, lastD);
+    const currDate = new Date(currY, currM - 1, currD);
+    const diffDays = Math.round((currDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays === 1) {
       return { count: prevStreak.count + 1, lastActiveDate: today };
-    } else {
+    } else if (diffDays > 1) {
       return { count: 1, lastActiveDate: today };
+    } else {
+      return prevStreak;
     }
   }, []);
 
-  // Action: Update video watch progress
+  // Action: Update video watch progress (atomic to avoid clobbering daily activity)
   const handleUpdateVideoProgress = useCallback(
     (videoId: string, progress: VideoWatchProgress) => {
-      const existing = studyData.videoProgress || {};
-      // Avoid excessive writes if values are identical
-      const prev = existing[videoId];
-      if (
-        prev &&
-        prev.currentTime === progress.currentTime &&
-        prev.percent === progress.percent
-      ) {
-        return;
-      }
+      updateStudyData((prev) => {
+        const existing = prev.videoProgress || {};
+        const prevProg = existing[videoId];
+        if (
+          prevProg &&
+          prevProg.currentTime === progress.currentTime &&
+          prevProg.percent === progress.percent
+        ) {
+          return prev;
+        }
 
-      const updated: UserStudyData = {
-        ...studyData,
-        videoProgress: {
-          ...existing,
-          [videoId]: progress,
-        },
-        lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+        return {
+          ...prev,
+          videoProgress: {
+            ...existing,
+            [videoId]: progress,
+          },
+          lastUpdated: new Date().toISOString(),
+        };
+      });
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
   // Action: Live playback study time logging (tracks exact seconds/minutes watched, even for unfinished videos)
@@ -507,36 +527,46 @@ export default function StudyDeckPage() {
     (secondsDelta: number, _videoId: string) => {
       if (secondsDelta <= 0) return;
 
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const existingDaily = studyData.dailyActivity || {};
-      const curToday = existingDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+      // If current course is excluded from tracking, do not log to tracking system or streaks
+      if (currentCourseRef.current) {
+        const isTrackingDisabled = Boolean(
+          currentCourseRef.current.disabledFromTracking ||
+          memoryState.disabledPlaylistIds?.includes(currentCourseRef.current.id)
+        );
+        if (isTrackingDisabled) return;
+      }
 
-      const curSecs = curToday.seconds ?? (curToday.minutes || 0) * 60;
-      const newSecs = curSecs + secondsDelta;
-      const newMins = Math.max(1, Math.round(newSecs / 60));
+      const todayStr = getLocalDateString();
+      updateStudyData((prev) => {
+        const existingDaily = prev.dailyActivity || {};
+        const curToday = existingDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
 
-      const updatedDaily = {
-        ...existingDaily,
-        [todayStr]: {
-          ...curToday,
-          seconds: newSecs,
-          minutes: newMins,
-        },
-      };
+        const curSecs = curToday.seconds !== undefined ? curToday.seconds : (curToday.minutes || 0) * 60;
+        const newSecs = curSecs + secondsDelta;
+        const newMins = Math.round(newSecs / 60);
 
-      const newStreak = updateStreakOnActivity(
-        studyData.streak || { count: 0, lastActiveDate: '' }
-      );
+        const updatedDaily = {
+          ...existingDaily,
+          [todayStr]: {
+            ...curToday,
+            seconds: newSecs,
+            minutes: newMins,
+          },
+        };
 
-      const updated: UserStudyData = {
-        ...studyData,
-        dailyActivity: updatedDaily,
-        streak: newStreak,
-        lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+        const newStreak = updateStreakOnActivity(
+          prev.streak || { count: 0, lastActiveDate: '' }
+        );
+
+        return {
+          ...prev,
+          dailyActivity: updatedDaily,
+          streak: newStreak,
+          lastUpdated: new Date().toISOString(),
+        };
+      });
     },
-    [studyData, persistData, updateStreakOnActivity]
+    [updateStudyData, updateStreakOnActivity]
   );
 
   // Action: Toggle completion status for a video
@@ -545,65 +575,69 @@ export default function StudyDeckPage() {
       if (!currentCourse) return;
       const isTrackingDisabled = Boolean(
         currentCourse.disabledFromTracking ||
-        studyData.disabledPlaylistIds?.includes(currentCourse.id)
+        memoryState.disabledPlaylistIds?.includes(currentCourse.id)
       );
 
-      const currentList = studyData.completedVideos[currentCourse.id] || [];
-      const alreadyDone = currentList.includes(videoId);
+      let wasNewlyDone = false;
+      let completedCount = 0;
 
-      const newList = alreadyDone
-        ? currentList.filter((id) => id !== videoId)
-        : [...currentList, videoId];
+      updateStudyData((prev) => {
+        const currentList = prev.completedVideos[currentCourse.id] || [];
+        const alreadyDone = currentList.includes(videoId);
+        wasNewlyDone = !alreadyDone;
 
-      // If playlist is disabled from tracking, DO NOT affect streaks or daily target tracking
-      const newStreak = (!alreadyDone && !isTrackingDisabled)
-        ? updateStreakOnActivity(studyData.streak || { count: 0, lastActiveDate: '' })
-        : studyData.streak;
+        const newList = alreadyDone
+          ? currentList.filter((id) => id !== videoId)
+          : [...currentList, videoId];
 
-      let updatedDaily = studyData.dailyActivity || {};
-      if (!isTrackingDisabled) {
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+        completedCount = newList.length;
 
-        if (!alreadyDone) {
-          updatedDaily = {
-            ...updatedDaily,
-            [todayStr]: {
-              ...curToday,
-              topics: (curToday.topics || 0) + 1,
-            },
-          };
-        } else {
-          updatedDaily = {
-            ...updatedDaily,
-            [todayStr]: {
-              ...curToday,
-              topics: Math.max(0, (curToday.topics || 1) - 1),
-            },
-          };
+        // If playlist is disabled from tracking, DO NOT affect streaks or daily target tracking
+        const newStreak = (!alreadyDone && !isTrackingDisabled)
+          ? updateStreakOnActivity(prev.streak || { count: 0, lastActiveDate: '' })
+          : prev.streak;
+
+        let updatedDaily = prev.dailyActivity || {};
+        if (!isTrackingDisabled) {
+          const todayStr = getLocalDateString();
+          const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+
+          if (!alreadyDone) {
+            updatedDaily = {
+              ...updatedDaily,
+              [todayStr]: {
+                ...curToday,
+                topics: (curToday.topics || 0) + 1,
+              },
+            };
+          } else {
+            updatedDaily = {
+              ...updatedDaily,
+              [todayStr]: {
+                ...curToday,
+                topics: Math.max(0, (curToday.topics || 1) - 1),
+              },
+            };
+          }
         }
-      }
 
-      const updated: UserStudyData = {
-        ...studyData,
-        completedVideos: {
-          ...studyData.completedVideos,
-          [currentCourse.id]: newList,
-        },
-        dailyActivity: updatedDaily,
-        streak: newStreak,
-        lastUpdated: new Date().toISOString(),
-      };
+        return {
+          ...prev,
+          completedVideos: {
+            ...prev.completedVideos,
+            [currentCourse.id]: newList,
+          },
+          dailyActivity: updatedDaily,
+          streak: newStreak,
+          lastUpdated: new Date().toISOString(),
+        };
+      });
 
-      persistData(updated);
-
-      if (!alreadyDone) {
-        if (newList.length === currentCourse.items.length) {
-          fireConfetti();
-        }
+      if (wasNewlyDone && completedCount === currentCourse.items.length) {
+        fireConfetti();
       }
     },
-    [studyData, currentCourse, persistData, fireConfetti, updateStreakOnActivity]
+    [currentCourse, updateStudyData, fireConfetti, updateStreakOnActivity]
   );
 
   // Action: Complete current video & advance to next
@@ -612,66 +646,71 @@ export default function StudyDeckPage() {
 
     const isTrackingDisabled = Boolean(
       currentCourse.disabledFromTracking ||
-      studyData.disabledPlaylistIds?.includes(currentCourse.id)
+      memoryState.disabledPlaylistIds?.includes(currentCourse.id)
     );
-
-    const currentList = studyData.completedVideos[currentCourse.id] || [];
-    const isAlreadyDone = currentList.includes(activeVideo.videoId);
-    const updatedList = isAlreadyDone
-      ? currentList
-      : [...currentList, activeVideo.videoId];
 
     const hasNext = currentVideoIndex < currentCourse.items.length - 1;
     const nextVideoId = hasNext
       ? currentCourse.items[currentVideoIndex + 1].videoId
       : activeVideo.videoId;
 
-    // If playlist is disabled from tracking, DO NOT affect streaks or daily target tracking
-    const newStreak = (!isAlreadyDone && !isTrackingDisabled)
-      ? updateStreakOnActivity(studyData.streak || { count: 0, lastActiveDate: '' })
-      : studyData.streak;
+    let allCompleted = false;
 
-    let updatedDaily = studyData.dailyActivity || {};
-    if (!isTrackingDisabled) {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+    updateStudyData((prev) => {
+      const currentList = prev.completedVideos[currentCourse.id] || [];
+      const isAlreadyDone = currentList.includes(activeVideo.videoId);
+      const updatedList = isAlreadyDone
+        ? currentList
+        : [...currentList, activeVideo.videoId];
 
-      if (!isAlreadyDone) {
-        updatedDaily = {
-          ...updatedDaily,
-          [todayStr]: {
-            ...curToday,
-            topics: (curToday.topics || 0) + 1,
-          },
-        };
+      if (updatedList.length === currentCourse.items.length) {
+        allCompleted = true;
       }
-    }
 
-    const updated: UserStudyData = {
-      ...studyData,
-      activeVideoId: nextVideoId,
-      completedVideos: {
-        ...studyData.completedVideos,
-        [currentCourse.id]: updatedList,
-      },
-      dailyActivity: updatedDaily,
-      streak: newStreak,
-      lastUpdated: new Date().toISOString(),
-    };
+      // If playlist is disabled from tracking, DO NOT affect streaks or daily target tracking
+      const newStreak = (!isAlreadyDone && !isTrackingDisabled)
+        ? updateStreakOnActivity(prev.streak || { count: 0, lastActiveDate: '' })
+        : prev.streak;
 
-    persistData(updated);
+      let updatedDaily = prev.dailyActivity || {};
+      if (!isTrackingDisabled) {
+        const todayStr = getLocalDateString();
+        const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
 
-    if (updatedList.length === currentCourse.items.length) {
+        if (!isAlreadyDone) {
+          updatedDaily = {
+            ...updatedDaily,
+            [todayStr]: {
+              ...curToday,
+              topics: (curToday.topics || 0) + 1,
+            },
+          };
+        }
+      }
+
+      return {
+        ...prev,
+        activeVideoId: nextVideoId,
+        completedVideos: {
+          ...prev.completedVideos,
+          [currentCourse.id]: updatedList,
+        },
+        dailyActivity: updatedDaily,
+        streak: newStreak,
+        lastUpdated: new Date().toISOString(),
+      };
+    });
+
+    if (allCompleted) {
       fireConfetti();
     }
   }, [
     activeVideo,
-    studyData,
     currentCourse,
     currentVideoIndex,
-    persistData,
     fireConfetti,
     updateStreakOnActivity,
+    updateStudyData,
   ]);
 
   // Action: Prev / Next Lesson Navigation
@@ -694,103 +733,101 @@ export default function StudyDeckPage() {
   // Action: Save Note for a video
   const handleSaveNote = useCallback(
     (videoId: string, note: string) => {
-      const updated: UserStudyData = {
-        ...studyData,
+      updateStudyData((prev) => ({
+        ...prev,
         videoNotes: {
-          ...studyData.videoNotes,
+          ...prev.videoNotes,
           [videoId]: note,
         },
         lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+      }));
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
   // Action: Switch Course & enter learning mode
   const handleSelectCourse = useCallback(
     (course: PlaylistCourse, targetVideoId?: string) => {
       const vid = targetVideoId || course.items[0]?.videoId || '';
-      const updated: UserStudyData = {
-        ...studyData,
+      updateStudyData((prev) => ({
+        ...prev,
         activePlaylistId: course.id,
         activeVideoId: vid,
         lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+      }));
       setView('learning');
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
   // Action: Delete Course from library
   const handleDeleteCourse = useCallback(
     (courseId: string) => {
-      const remaining = (studyData.customPlaylists || []).filter((c) => c.id !== courseId);
-      const nextActiveCourse = remaining[0] || null;
+      updateStudyData((prev) => {
+        const remaining = (prev.customPlaylists || []).filter((c) => c.id !== courseId);
+        const nextActiveCourse = remaining[0] || null;
 
-      const newCompleted = { ...studyData.completedVideos };
-      delete newCompleted[courseId];
+        const newCompleted = { ...prev.completedVideos };
+        delete newCompleted[courseId];
 
-      const updated: UserStudyData = {
-        ...studyData,
-        customPlaylists: remaining,
-        disabledPlaylistIds: (studyData.disabledPlaylistIds || []).filter((id) => id !== courseId),
-        activePlaylistId: nextActiveCourse ? nextActiveCourse.id : '',
-        activeVideoId: nextActiveCourse?.items[0]?.videoId || '',
-        completedVideos: newCompleted,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      persistData(updated);
+        return {
+          ...prev,
+          customPlaylists: remaining,
+          disabledPlaylistIds: (prev.disabledPlaylistIds || []).filter((id) => id !== courseId),
+          activePlaylistId: nextActiveCourse ? nextActiveCourse.id : '',
+          activeVideoId: nextActiveCourse?.items[0]?.videoId || '',
+          completedVideos: newCompleted,
+          lastUpdated: new Date().toISOString(),
+        };
+      });
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
   // Action: Toggle playlist tracking inclusion (enabling/disabling from tracking system)
   const handleTogglePlaylistTracking = useCallback(
     (courseId: string) => {
-      const currentDisabled = studyData.disabledPlaylistIds || [];
-      const isCurrentlyDisabled = currentDisabled.includes(courseId);
-      const newDisabledList = isCurrentlyDisabled
-        ? currentDisabled.filter((id) => id !== courseId)
-        : [...currentDisabled, courseId];
+      updateStudyData((prev) => {
+        const currentDisabled = prev.disabledPlaylistIds || [];
+        const isCurrentlyDisabled = currentDisabled.includes(courseId);
+        const newDisabledList = isCurrentlyDisabled
+          ? currentDisabled.filter((id) => id !== courseId)
+          : [...currentDisabled, courseId];
 
-      const updatedPlaylists = (studyData.customPlaylists || []).map((c) => {
-        if (c.id === courseId) {
-          return {
-            ...c,
-            disabledFromTracking: !isCurrentlyDisabled,
-          };
+        const updatedPlaylists = (prev.customPlaylists || []).map((c) => {
+          if (c.id === courseId) {
+            return {
+              ...c,
+              disabledFromTracking: !isCurrentlyDisabled,
+            };
+          }
+          return c;
+        });
+
+        // When disabling the active playlist, automatically switch active track to a remaining tracked playlist
+        let nextActivePlaylistId = prev.activePlaylistId;
+        let nextActiveVideoId = prev.activeVideoId;
+        if (!isCurrentlyDisabled && prev.activePlaylistId === courseId) {
+          const remainingTracked = updatedPlaylists.find(
+            (c) => c.id !== courseId && !newDisabledList.includes(c.id)
+          );
+          if (remainingTracked) {
+            nextActivePlaylistId = remainingTracked.id;
+            nextActiveVideoId = remainingTracked.items[0]?.videoId || '';
+          }
         }
-        return c;
+
+        return {
+          ...prev,
+          activePlaylistId: nextActivePlaylistId,
+          activeVideoId: nextActiveVideoId,
+          disabledPlaylistIds: newDisabledList,
+          customPlaylists: updatedPlaylists,
+          lastUpdated: new Date().toISOString(),
+        };
       });
-
-      // When disabling the active playlist, automatically switch active track to a remaining tracked playlist
-      let nextActivePlaylistId = studyData.activePlaylistId;
-      let nextActiveVideoId = studyData.activeVideoId;
-      if (!isCurrentlyDisabled && studyData.activePlaylistId === courseId) {
-        const remainingTracked = updatedPlaylists.find(
-          (c) => c.id !== courseId && !newDisabledList.includes(c.id)
-        );
-        if (remainingTracked) {
-          nextActivePlaylistId = remainingTracked.id;
-          nextActiveVideoId = remainingTracked.items[0]?.videoId || '';
-        }
-      }
-
-      const updated: UserStudyData = {
-        ...studyData,
-        activePlaylistId: nextActivePlaylistId,
-        activeVideoId: nextActiveVideoId,
-        disabledPlaylistIds: newDisabledList,
-        customPlaylists: updatedPlaylists,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      persistData(updated);
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
   // Action: Import custom YouTube playlist
@@ -807,40 +844,42 @@ export default function StudyDeckPage() {
       }
 
       const importedCourse: PlaylistCourse = data.course;
-      const exists = (studyData.customPlaylists || []).some(
-        (c) => c.id === importedCourse.id
-      );
 
-      const newCustomList = exists
-        ? studyData.customPlaylists.map((c) =>
-            c.id === importedCourse.id ? importedCourse : c
-          )
-        : [...(studyData.customPlaylists || []), importedCourse];
+      updateStudyData((prev) => {
+        const exists = (prev.customPlaylists || []).some(
+          (c) => c.id === importedCourse.id
+        );
 
-      // Pre-populate video progress duration entries for imported items
-      const newVideoProgress = { ...(studyData.videoProgress || {}) };
-      importedCourse.items.forEach((item) => {
-        const parsedDur = parseDurationToSeconds(item.duration);
-        if (parsedDur > 0) {
-          newVideoProgress[item.videoId] = {
-            currentTime: newVideoProgress[item.videoId]?.currentTime || 0,
-            duration: parsedDur,
-            percent: newVideoProgress[item.videoId]?.percent || 0,
-            lastWatchedAt: newVideoProgress[item.videoId]?.lastWatchedAt || new Date().toISOString(),
-          };
-        }
+        const newCustomList = exists
+          ? prev.customPlaylists.map((c) =>
+              c.id === importedCourse.id ? importedCourse : c
+            )
+          : [...(prev.customPlaylists || []), importedCourse];
+
+        // Pre-populate video progress duration entries for imported items
+        const newVideoProgress = { ...(prev.videoProgress || {}) };
+        importedCourse.items.forEach((item) => {
+          const parsedDur = parseDurationToSeconds(item.duration);
+          if (parsedDur > 0) {
+            newVideoProgress[item.videoId] = {
+              currentTime: newVideoProgress[item.videoId]?.currentTime || 0,
+              duration: parsedDur,
+              percent: newVideoProgress[item.videoId]?.percent || 0,
+              lastWatchedAt: newVideoProgress[item.videoId]?.lastWatchedAt || new Date().toISOString(),
+            };
+          }
+        });
+
+        return {
+          ...prev,
+          activePlaylistId: importedCourse.id,
+          activeVideoId: importedCourse.items[0]?.videoId || '',
+          customPlaylists: newCustomList,
+          videoProgress: newVideoProgress,
+          lastUpdated: new Date().toISOString(),
+        };
       });
 
-      const updated: UserStudyData = {
-        ...studyData,
-        activePlaylistId: importedCourse.id,
-        activeVideoId: importedCourse.items[0]?.videoId || '',
-        customPlaylists: newCustomList,
-        videoProgress: newVideoProgress,
-        lastUpdated: new Date().toISOString(),
-      };
-
-      persistData(updated);
       setView('learning'); // Jump right into the imported course
       return { success: true, course: importedCourse };
     } catch (e: any) {
@@ -855,17 +894,16 @@ export default function StudyDeckPage() {
   const handleMarkAllComplete = useCallback(() => {
     if (!currentCourse) return;
     const allIds = currentCourse.items.map((i) => i.videoId);
-    const updated: UserStudyData = {
-      ...studyData,
+    updateStudyData((prev) => ({
+      ...prev,
       completedVideos: {
-        ...studyData.completedVideos,
+        ...prev.completedVideos,
         [currentCourse.id]: allIds,
       },
       lastUpdated: new Date().toISOString(),
-    };
-    persistData(updated);
+    }));
     fireConfetti();
-  }, [currentCourse, studyData, persistData, fireConfetti]);
+  }, [currentCourse, updateStudyData, fireConfetti]);
 
   // Action: Reset current course progress
   const handleResetCourseProgress = useCallback(
@@ -873,17 +911,16 @@ export default function StudyDeckPage() {
       const targetId = courseId || currentCourse?.id;
       if (!targetId) return;
 
-      const updated: UserStudyData = {
-        ...studyData,
+      updateStudyData((prev) => ({
+        ...prev,
         completedVideos: {
-          ...studyData.completedVideos,
+          ...prev.completedVideos,
           [targetId]: [],
         },
         lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+      }));
     },
-    [currentCourse, studyData, persistData]
+    [currentCourse, updateStudyData]
   );
 
   // Action: Restore Backup
@@ -897,74 +934,80 @@ export default function StudyDeckPage() {
   // Action: Toggle custom tag on a video
   const handleToggleTag = useCallback(
     (videoId: string, tag: string) => {
-      const currentTags = studyData.videoTags?.[videoId] || [];
-      const exists = currentTags.includes(tag);
-      const newTags = exists ? currentTags.filter((t) => t !== tag) : [...currentTags, tag];
-      const updated: UserStudyData = {
-        ...studyData,
-        videoTags: {
-          ...(studyData.videoTags || {}),
-          [videoId]: newTags,
-        },
-        lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+      updateStudyData((prev) => {
+        const currentTags = prev.videoTags?.[videoId] || [];
+        const exists = currentTags.includes(tag);
+        const newTags = exists ? currentTags.filter((t) => t !== tag) : [...currentTags, tag];
+        return {
+          ...prev,
+          videoTags: {
+            ...(prev.videoTags || {}),
+            [videoId]: newTags,
+          },
+          lastUpdated: new Date().toISOString(),
+        };
+      });
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
   // Action: Update weekly study goal
   const handleUpdateWeeklyGoal = useCallback(
     (goal: WeeklyStudyGoal) => {
-      const updated: UserStudyData = {
-        ...studyData,
+      updateStudyData((prev) => ({
+        ...prev,
         weeklyGoal: goal,
         lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+      }));
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
-  // Action: Log a manual or auto study session on a date
+  // Action: Log or adjust study session on a date (supports both 'set' and 'add' modes)
   const handleLogStudySession = useCallback(
-    (date: string, minutes: number, topics: number) => {
-      const currentRec = studyData.dailyActivity?.[date] || { minutes: 0, topics: 0 };
-      const updatedRec = {
-        minutes: (currentRec.minutes || 0) + minutes,
-        topics: (currentRec.topics || 0) + topics,
-      };
+    (date: string, minutes: number, topics: number, mode: 'add' | 'set' = 'add') => {
+      updateStudyData((prev) => {
+        const currentRec = prev.dailyActivity?.[date] || { minutes: 0, seconds: 0, topics: 0 };
+        const newMins = mode === 'set' ? Math.max(0, minutes) : Math.max(0, (currentRec.minutes || 0) + minutes);
+        const newSecs = newMins * 60;
+        const newTopics = mode === 'set' ? Math.max(0, topics) : Math.max(0, (currentRec.topics || 0) + topics);
 
-      const newStreak = updateStreakOnActivity(
-        studyData.streak || { count: 0, lastActiveDate: '' }
-      );
+        const updatedDaily = {
+          ...(prev.dailyActivity || {}),
+          [date]: {
+            ...currentRec,
+            minutes: newMins,
+            seconds: newSecs,
+            topics: newTopics,
+          },
+        };
 
-      const updated: UserStudyData = {
-        ...studyData,
-        dailyActivity: {
-          ...(studyData.dailyActivity || {}),
-          [date]: updatedRec,
-        },
-        streak: newStreak,
-        lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+        const newStreak = updateStreakOnActivity(
+          prev.streak || { count: 0, lastActiveDate: '' }
+        );
+
+        return {
+          ...prev,
+          dailyActivity: updatedDaily,
+          streak: newStreak,
+          lastUpdated: new Date().toISOString(),
+        };
+      });
       fireConfetti();
     },
-    [studyData, persistData, updateStreakOnActivity, fireConfetti]
+    [updateStudyData, updateStreakOnActivity, fireConfetti]
   );
 
   // Action: Update daily target & study goal
   const handleUpdateStudyGoal = useCallback(
     (goal: StudyGoal) => {
-      const updated: UserStudyData = {
-        ...studyData,
+      updateStudyData((prev) => ({
+        ...prev,
         studyGoal: goal,
         lastUpdated: new Date().toISOString(),
-      };
-      persistData(updated);
+      }));
     },
-    [studyData, persistData]
+    [updateStudyData]
   );
 
   // Action: Reset all local storage data

@@ -42,7 +42,7 @@ interface DashboardViewProps {
   onResetCourseProgress: (courseId: string) => void;
   onTogglePlaylistTracking: (courseId: string) => void;
   onUpdateWeeklyGoal?: (goal: WeeklyStudyGoal) => void;
-  onLogStudySession?: (date: string, minutes: number, topics: number) => void;
+  onLogStudySession?: (date: string, minutes: number, topics: number, mode?: 'add' | 'set') => void;
   theme?: 'dark' | 'light';
 }
 
