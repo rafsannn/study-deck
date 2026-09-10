@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useSyncExternalStore, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Minimize2, ListVideo } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { PlaylistSidebar } from '@/components/PlaylistSidebar';
@@ -147,6 +147,28 @@ export default function StudyDeckPage() {
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
   const [isTargetEstimatorOpen, setIsTargetEstimatorOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [theaterMode, setTheaterMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('study_deck_theater_mode') === 'true';
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
+
+  const handleToggleTheaterMode = useCallback(() => {
+    setTheaterMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('study_deck_theater_mode', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   // Global Keyboard Shortcuts (Shortcuts Modal ?, Stats S)
   useEffect(() => {
@@ -916,31 +938,70 @@ export default function StudyDeckPage() {
         </main>
       ) : (
         /* Immersive Video Learning Studio */
-        <main className="flex-1 flex flex-col lg:flex-row overflow-hidden w-full">
-          {/* Left Section: Focused Video Player & Controls */}
+        <main
+          className={`flex-1 flex ${
+            theaterMode ? 'flex-col overflow-y-auto' : 'flex-col lg:flex-row overflow-hidden'
+          } w-full transition-all duration-200`}
+        >
+          {/* Left / Main Section: Focused Video Player & Controls */}
           <section
-            className={`flex-1 p-4 sm:p-8 flex flex-col gap-6 overflow-y-auto transition-colors duration-200 ${
+            className={`flex-1 ${
+              theaterMode
+                ? 'px-3 py-2.5 sm:px-5 sm:py-3.5 max-w-[1700px] mx-auto w-full'
+                : 'px-3 py-2.5 sm:px-6 sm:py-3.5 overflow-y-auto'
+            } flex flex-col gap-2.5 sm:gap-3 transition-colors duration-200 ${
               isDark ? 'bg-[#09090b]' : 'bg-zinc-100'
             }`}
           >
-            {/* Breadcrumb Back Button */}
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => setView('dashboard')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
-                  isDark
-                    ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                    : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-900 shadow-xs'
-                }`}
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back to Dashboard</span>
-              </button>
+            {/* Breadcrumb Back Button & Top Navigation */}
+            <div className="flex items-center justify-between gap-3 flex-wrap shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  onClick={() => setView('dashboard')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                    isDark
+                      ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                      : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-900 shadow-xs'
+                  }`}
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back to Dashboard</span>
+                </button>
 
-              {currentCourse && (
-                <span className="text-xs font-medium text-zinc-500 truncate max-w-xs sm:max-w-md">
-                  Track: <strong className={isDark ? 'text-zinc-300' : 'text-zinc-800'}>{currentCourse.title}</strong>
-                </span>
+                {currentCourse && (
+                  <span className="text-xs font-medium text-zinc-500 truncate max-w-xs sm:max-w-md">
+                    Track: <strong className={isDark ? 'text-zinc-300' : 'text-zinc-800'}>{currentCourse.title}</strong>
+                  </span>
+                )}
+              </div>
+
+              {/* Theater Mode Action Pill in Header */}
+              {theaterMode && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById('theater-course-playlist');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                      isDark
+                        ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
+                        : 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200 shadow-xs'
+                    }`}
+                  >
+                    <ListVideo className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Lessons ({currentCompletedVideos.length}/{currentCourse?.items.length || 0})</span>
+                  </button>
+
+                  <button
+                    onClick={handleToggleTheaterMode}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-xs"
+                    title="Switch to Standard side-by-side view (T)"
+                  >
+                    <Minimize2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Exit Theater</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -965,17 +1026,42 @@ export default function StudyDeckPage() {
               onTriggerConfetti={fireConfetti}
               onOpenImportModal={() => setIsImportModalOpen(true)}
               theme={theme}
+              theaterMode={theaterMode}
+              onToggleTheaterMode={handleToggleTheaterMode}
             />
           </section>
 
-          {/* Right Section: Course Checklist Sidebar */}
+          {/* Right / Bottom Section: Course Checklist Sidebar */}
           <section
-            className={`w-full lg:w-[380px] xl:w-[400px] border-t lg:border-t-0 lg:border-l flex flex-col shrink-0 transition-colors duration-200 ${
+            id="theater-course-playlist"
+            className={`${
+              theaterMode
+                ? 'w-full max-w-[1700px] mx-auto border-t p-3 sm:p-5 lg:p-6 mt-2'
+                : 'w-full lg:w-[380px] xl:w-[400px] border-t lg:border-t-0 lg:border-l'
+            } flex flex-col shrink-0 transition-colors duration-200 ${
               isDark
                 ? 'border-zinc-800 bg-[#0c0c0e]'
                 : 'border-zinc-200 bg-white'
             }`}
           >
+            {theaterMode && (
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-800/60">
+                <div className="flex items-center gap-2">
+                  <ListVideo className="w-4 h-4 text-indigo-400" />
+                  <h3 className="font-bold text-sm">Course Playlist</h3>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 font-mono">
+                    {currentCompletedVideos.length} / {currentCourse?.items.length || 0} completed
+                  </span>
+                </div>
+                <button
+                  onClick={handleToggleTheaterMode}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-medium inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>Standard View</span>
+                </button>
+              </div>
+            )}
             <PlaylistSidebar
               course={currentCourse}
               activeVideoId={studyData.activeVideoId}

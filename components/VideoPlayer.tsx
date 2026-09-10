@@ -366,6 +366,8 @@ interface VideoPlayerProps {
   onTriggerConfetti?: () => void;
   onOpenImportModal?: () => void;
   theme?: 'dark' | 'light';
+  theaterMode?: boolean;
+  onToggleTheaterMode?: () => void;
 }
 
 const SPEED_PRESETS = [0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -392,10 +394,21 @@ export function VideoPlayer({
   onTriggerConfetti,
   onOpenImportModal,
   theme = 'dark',
+  theaterMode: propTheaterMode,
+  onToggleTheaterMode,
 }: VideoPlayerProps) {
   const [copied, setCopied] = useState(false);
   const [showNotes, setShowNotes] = useState(true);
-  const [theaterMode, setTheaterMode] = useState(false);
+  const [internalTheaterMode, setInternalTheaterMode] = useState(false);
+  const theaterMode = propTheaterMode !== undefined ? propTheaterMode : internalTheaterMode;
+
+  const handleToggleTheater = useCallback(() => {
+    if (onToggleTheaterMode) {
+      onToggleTheaterMode();
+    } else {
+      setInternalTheaterMode((prev) => !prev);
+    }
+  }, [onToggleTheaterMode]);
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number>(0);
   const [totalVideoDuration, setTotalVideoDuration] = useState<number>(0);
   const [isPlayingLive, setIsPlayingLive] = useState(false);
@@ -420,6 +433,8 @@ export function VideoPlayer({
   const [newTagInput, setNewTagInput] = useState<string>('');
   const [showTagInput, setShowTagInput] = useState<boolean>(false);
   const [isChaptersExpanded, setIsChaptersExpanded] = useState(false);
+  const [isChapterMenuOpen, setIsChapterMenuOpen] = useState(false);
+  const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false);
   const [isCursorHidden, setIsCursorHidden] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isFallbackMaximized, setIsFallbackMaximized] = useState<boolean>(false);
@@ -888,6 +903,27 @@ export function VideoPlayer({
     [video, sendIframeCommand, totalVideoDuration, watchProgress?.duration, onUpdateProgress]
   );
 
+  // Chapter Navigation: Jump to Previous Chapter
+  const handleJumpToPrevChapter = useCallback(() => {
+    if (chapters.length === 0) return;
+    const currentChapter = activeChapterIndex >= 0 ? chapters[activeChapterIndex] : null;
+    if (currentChapter && currentPlaybackTime - currentChapter.time > 3) {
+      handleSeekToTime(currentChapter.time);
+    } else if (activeChapterIndex > 0) {
+      handleSeekToTime(chapters[activeChapterIndex - 1].time);
+    } else {
+      handleSeekToTime(0);
+    }
+  }, [chapters, activeChapterIndex, currentPlaybackTime, handleSeekToTime]);
+
+  // Chapter Navigation: Jump to Next Chapter
+  const handleJumpToNextChapter = useCallback(() => {
+    if (chapters.length === 0) return;
+    if (activeChapterIndex < chapters.length - 1) {
+      handleSeekToTime(chapters[activeChapterIndex + 1].time);
+    }
+  }, [chapters, activeChapterIndex, handleSeekToTime]);
+
   // Keyboard shortcut listener for player controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -911,6 +947,16 @@ export function VideoPlayer({
       else if (e.code === 'Space' || key === 'k') {
         e.preventDefault();
         handleTogglePlayPause();
+      }
+      // Jump to Previous Chapter (Alt + Left Arrow or Shift + P)
+      else if ((e.altKey && e.key === 'ArrowLeft') || (e.shiftKey && key === 'p')) {
+        e.preventDefault();
+        handleJumpToPrevChapter();
+      }
+      // Jump to Next Chapter (Alt + Right Arrow or Shift + N)
+      else if ((e.altKey && e.key === 'ArrowRight') || (e.shiftKey && key === 'n')) {
+        e.preventDefault();
+        handleJumpToNextChapter();
       }
       // Seek Backward 10s (J or Left Arrow)
       else if (key === 'j' || e.key === 'ArrowLeft') {
@@ -942,11 +988,10 @@ export function VideoPlayer({
         e.preventDefault();
         if (video?.videoId) onToggleComplete(video.videoId);
       }
-      // Focus Notes Scratchpad (T)
+      // Toggle Theater Mode (T)
       else if (key === 't') {
         e.preventDefault();
-        const pad = document.getElementById('video-scratchpad');
-        if (pad) pad.focus();
+        handleToggleTheater();
       }
       // Toggle Chapters (C)
       else if (key === 'c') {
@@ -1000,9 +1045,12 @@ export function VideoPlayer({
     handleTogglePlayPause,
     handleToggleMute,
     handleSeekToTime,
+    handleJumpToPrevChapter,
+    handleJumpToNextChapter,
     currentPlaybackTime,
     isPlayerMaximized,
     isFallbackMaximized,
+    handleToggleTheater,
   ]);
 
   const handleCopyLink = async () => {
@@ -1147,7 +1195,7 @@ export function VideoPlayer({
   const embedUrl = `https://www.youtube.com/embed/${video.videoId}?enablejsapi=1&autoplay=1&controls=0&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0${startParam}`;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-2.5 sm:gap-3">
       {/* Embedded YouTube Player Container */}
       <div
         id={`yt-player-container-${video.videoId}`}
@@ -1160,7 +1208,11 @@ export function VideoPlayer({
                 isDark
                   ? 'shadow-indigo-500/10 border border-zinc-800 bg-black'
                   : 'shadow-zinc-300/40 border border-zinc-200 bg-black'
-              } rounded-2xl ${theaterMode ? 'aspect-[21/9]' : 'aspect-video'}`
+              } rounded-2xl aspect-video ${
+                theaterMode
+                  ? 'w-full max-h-[calc(100vh-230px)] max-w-[calc((100vh-230px)*16/9)] mx-auto ring-1 ring-indigo-500/30 shadow-indigo-950/40'
+                  : 'w-full max-h-[calc(100vh-250px)] max-w-[calc((100vh-250px)*16/9)] mx-auto'
+              }`
         } ${
           isCursorHidden && isPlayerMaximized && !isFsChaptersOpen && !isFsControlsHovered
             ? 'cursor-none select-none'
@@ -1563,39 +1615,67 @@ export function VideoPlayer({
 
       {/* Custom Player Control Console */}
       <div
-        className={`p-3.5 sm:p-4 rounded-2xl border flex flex-col gap-3 transition-colors ${
+        id="player-control-console"
+        className={`w-full ${
+          theaterMode
+            ? 'max-w-[calc((100vh-230px)*16/9)]'
+            : 'max-w-[calc((100vh-250px)*16/9)]'
+        } mx-auto p-3 sm:p-4 rounded-2xl border shadow-xl transition-all duration-200 ${
           isDark
-            ? 'bg-[#0c0c0e] border-zinc-800'
-            : 'bg-white border-zinc-200 shadow-xs'
+            ? 'bg-[#121217] border-zinc-800/90 shadow-black/60 text-zinc-100'
+            : 'bg-white border-zinc-200/90 shadow-md text-zinc-900'
         }`}
       >
-        {/* Interactive Timeline Range Scrubber */}
-        <div className="space-y-1">
-          <div className="relative flex items-center group">
+        {/* Timeline Scrubber & Timestamp Header */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs font-mono text-zinc-400 px-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-indigo-400 font-bold text-sm tracking-tight">{formatTime(displayCurrentTime)}</span>
+              <span className="text-zinc-600">/</span>
+              <span className="text-zinc-400">{displayDuration > 0 ? formatTime(displayDuration) : '--:--'}</span>
+            </div>
+
+            {chapters.length > 0 && currentActiveChapter && (
+              <div
+                onClick={() => setIsChapterMenuOpen((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-sans font-medium border cursor-pointer max-w-[280px] sm:max-w-[380px] truncate transition-colors ${
+                  isDark
+                    ? 'bg-indigo-950/30 border-indigo-500/30 text-indigo-300 hover:bg-indigo-900/40'
+                    : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                }`}
+                title="Click to view chapter list"
+              >
+                <Bookmark className="w-3 h-3 text-indigo-400 shrink-0" />
+                <span className="font-mono text-[10px] text-indigo-400 font-semibold shrink-0">
+                  Ch {activeChapterIndex >= 0 ? activeChapterIndex + 1 : 1}/{chapters.length}
+                </span>
+                <span className="text-zinc-500">•</span>
+                <span className="truncate text-[11px]">{currentActiveChapter.title}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Clean Smooth Scrubber Slider */}
+          <div className="relative flex items-center group py-0.5">
             <input
               type="range"
               min={0}
               max={displayDuration || 100}
               value={displayCurrentTime}
               onChange={(e) => handleSeekToTime(Number(e.target.value))}
-              className="w-full h-2 rounded-lg bg-zinc-800 accent-indigo-500 hover:accent-indigo-400 cursor-pointer transition-all"
+              className="w-full h-1.5 hover:h-2 rounded-lg bg-zinc-800 accent-indigo-500 hover:accent-indigo-400 cursor-pointer transition-all z-10"
               title="Click or drag to scrub timeline"
             />
           </div>
-
-          <div className="flex items-center justify-between text-xs font-mono text-zinc-400 px-0.5">
-            <span className="text-indigo-400 font-bold">{formatTime(displayCurrentTime)}</span>
-            <span>{displayDuration > 0 ? formatTime(displayDuration) : '--:--'}</span>
-          </div>
         </div>
 
-        {/* Control Buttons Bar */}
-        <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-zinc-800/40">
-          {/* Left Controls: Play/Pause, Seek -10s/+10s, Mute */}
-          <div className="flex items-center gap-2">
+        {/* Control Buttons Bar: Balanced Left, Center, and Right */}
+        <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-zinc-800/40 flex-wrap sm:flex-nowrap">
+          {/* Left: Play/Pause, Seek -10s/+10s, Volume */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={handleTogglePlayPause}
-              className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-md shadow-indigo-600/30 cursor-pointer"
+              className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-md shadow-indigo-600/30 cursor-pointer hover:scale-105 active:scale-95"
               title={isPlayingLive ? 'Pause (Space or K)' : 'Play (Space or K)'}
             >
               {isPlayingLive ? <Pause className="w-4 h-4 fill-white" /> : <Play className="w-4 h-4 fill-white" />}
@@ -1604,7 +1684,9 @@ export function VideoPlayer({
             <button
               onClick={() => handleSeekToTime(Math.max(0, currentPlaybackTime - 10))}
               className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
-                isDark ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300' : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+                isDark
+                  ? 'bg-zinc-900/90 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
+                  : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
               }`}
               title="Seek -10s (J or Left Arrow)"
             >
@@ -1614,7 +1696,9 @@ export function VideoPlayer({
             <button
               onClick={() => handleSeekToTime(currentPlaybackTime + 10)}
               className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
-                isDark ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300' : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+                isDark
+                  ? 'bg-zinc-900/90 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
+                  : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
               }`}
               title="Seek +10s (L or Right Arrow)"
             >
@@ -1623,7 +1707,7 @@ export function VideoPlayer({
 
             {/* Volume Control with Hover Slider */}
             <div
-              className="relative flex items-center"
+              className="relative flex items-center ml-0.5"
               onMouseEnter={() => setIsVolumeHovered(true)}
               onMouseLeave={() => setIsVolumeHovered(false)}
             >
@@ -1631,7 +1715,7 @@ export function VideoPlayer({
                 onClick={handleToggleMute}
                 className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
                   isDark
-                    ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
+                    ? 'bg-zinc-900/90 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
                     : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
                 }`}
                 title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
@@ -1645,12 +1729,11 @@ export function VideoPlayer({
                 )}
               </button>
 
-              {/* Slider popup on hover */}
               <div
                 className={`overflow-hidden transition-all duration-200 ease-out flex items-center ${
                   isVolumeHovered
-                    ? 'w-24 max-w-[100px] opacity-100 ml-2'
-                    : 'w-0 max-w-0 opacity-0 pointer-events-none'
+                    ? 'w-20 sm:w-24 opacity-100 ml-2'
+                    : 'w-0 opacity-0 pointer-events-none'
                 }`}
               >
                 <input
@@ -1660,47 +1743,178 @@ export function VideoPlayer({
                   step={1}
                   value={isMuted ? 0 : volume}
                   onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                  className="w-20 h-1.5 rounded-lg bg-zinc-700/60 accent-indigo-500 hover:accent-indigo-400 cursor-pointer transition-all"
+                  className="w-18 sm:w-20 h-1.5 rounded-lg bg-zinc-700/60 accent-indigo-500 hover:accent-indigo-400 cursor-pointer transition-all"
                   title={`Volume: ${isMuted ? 0 : volume}%`}
                 />
               </div>
             </div>
           </div>
 
-          {/* Right Controls: Speed Presets, Theater, Fullscreen */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="flex items-center gap-1 font-mono">
-              {SPEED_PRESETS.map((preset) => {
-                const isCurrent = playbackRate === preset;
-                return (
-                  <button
-                    key={preset}
-                    onClick={() => handleSetPlaybackRate(preset)}
-                    className={`px-2 py-1 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
-                      isCurrent
-                        ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
-                        : isDark
-                        ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-                        : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950'
-                    }`}
-                    title={`Speed ${preset}x ([ or ])`}
-                  >
-                    {preset}x
-                  </button>
-                );
-              })}
+          {/* Center: Chapter Quick Selector Pill & Jump Controls */}
+          {chapters.length > 0 ? (
+            <div className="relative flex items-center justify-center gap-1.5 min-w-0 mx-auto">
+              <button
+                onClick={handleJumpToPrevChapter}
+                disabled={activeChapterIndex <= 0 && currentPlaybackTime < 3}
+                className={`p-1.5 rounded-lg border text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                  isDark
+                    ? 'bg-zinc-900/90 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
+                    : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+                }`}
+                title="Previous Chapter (Alt+← or Shift+P)"
+              >
+                <SkipBack className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Interactive Chapter Menu Trigger Pill */}
+              <button
+                onClick={() => setIsChapterMenuOpen((prev) => !prev)}
+                className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all max-w-[200px] sm:max-w-[320px] truncate cursor-pointer ${
+                  isChapterMenuOpen
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs font-semibold'
+                    : isDark
+                    ? 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-800 text-zinc-200'
+                    : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-800'
+                }`}
+                title="Click to choose a chapter"
+              >
+                <Bookmark className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="truncate">
+                  {currentActiveChapter ? currentActiveChapter.title : 'Chapters'}
+                </span>
+                <ChevronDown className={`w-3 h-3 shrink-0 text-zinc-400 transition-transform ${isChapterMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              <button
+                onClick={handleJumpToNextChapter}
+                disabled={activeChapterIndex >= chapters.length - 1}
+                className={`p-1.5 rounded-lg border text-xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                  isDark
+                    ? 'bg-zinc-900/90 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
+                    : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+                }`}
+                title="Next Chapter (Alt+→ or Shift+N)"
+              >
+                <SkipForward className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Popover Chapter List */}
+              {isChapterMenuOpen && (
+                <div
+                  className={`absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-80 sm:w-96 max-h-72 overflow-y-auto rounded-xl border shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 ${
+                    isDark
+                      ? 'bg-zinc-900/95 border-zinc-700 text-zinc-200 backdrop-blur-md'
+                      : 'bg-white/95 border-zinc-200 text-zinc-900 shadow-xl backdrop-blur-md'
+                  }`}
+                >
+                  <div className="flex items-center justify-between px-2 py-1.5 border-b border-zinc-800/60 mb-1">
+                    <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
+                      <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+                      Chapters ({chapters.length})
+                    </span>
+                    <button
+                      onClick={() => setIsChapterMenuOpen(false)}
+                      className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="space-y-0.5">
+                    {chapters.map((chapter, idx) => {
+                      const isActive = activeChapterIndex === idx;
+                      return (
+                        <button
+                          key={chapter.id}
+                          onClick={() => {
+                            handleSeekToTime(chapter.time);
+                            setIsChapterMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                            isActive
+                              ? 'bg-indigo-600 text-white font-semibold'
+                              : isDark
+                              ? 'hover:bg-zinc-800/80 text-zinc-300'
+                              : 'hover:bg-zinc-100 text-zinc-700'
+                          }`}
+                        >
+                          <span className="truncate flex-1">{chapter.title}</span>
+                          <span className="font-mono text-[11px] opacity-75 shrink-0">{chapter.timeFormatted}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="hidden sm:block flex-1" />
+          )}
+
+          {/* Right: Playback Speed Dropdown, Theater, Fullscreen */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Playback Speed Popover */}
+            <div className="relative">
+              <button
+                onClick={() => setIsSpeedMenuOpen((prev) => !prev)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-mono font-semibold transition-all cursor-pointer ${
+                  isSpeedMenuOpen
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
+                    : isDark
+                    ? 'bg-zinc-900/90 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
+                    : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+                }`}
+                title="Playback Speed"
+              >
+                <span>{playbackRate}x</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${isSpeedMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isSpeedMenuOpen && (
+                <div
+                  className={`absolute bottom-full mb-2 right-0 w-28 rounded-xl border shadow-xl p-1 z-50 animate-in fade-in zoom-in-95 duration-150 ${
+                    isDark
+                      ? 'bg-zinc-900/95 border-zinc-700 backdrop-blur-md'
+                      : 'bg-white/95 border-zinc-200 shadow-xl backdrop-blur-md'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    {SPEED_PRESETS.map((preset) => {
+                      const isCurrent = playbackRate === preset;
+                      return (
+                        <button
+                          key={preset}
+                          onClick={() => {
+                            handleSetPlaybackRate(preset);
+                            setIsSpeedMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition-colors cursor-pointer ${
+                            isCurrent
+                              ? 'bg-indigo-600 text-white'
+                              : isDark
+                              ? 'hover:bg-zinc-800 text-zinc-300'
+                              : 'hover:bg-zinc-100 text-zinc-800'
+                          }`}
+                        >
+                          <span>{preset}x</span>
+                          {isCurrent && <Check className="w-3 h-3" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
-              onClick={() => setTheaterMode(!theaterMode)}
+              onClick={handleToggleTheater}
               className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
                 theaterMode
-                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
                   : isDark
-                  ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-zinc-900/90 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
                   : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950'
               }`}
-              title="Toggle Theater Mode"
+              title={theaterMode ? 'Exit Theater Mode (T)' : 'Theater Mode (T)'}
             >
               <Tv className="w-3.5 h-3.5" />
             </button>
@@ -1708,7 +1922,9 @@ export function VideoPlayer({
             <button
               onClick={handleToggleFullscreen}
               className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
-                isDark ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-300' : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
+                isDark
+                  ? 'bg-zinc-900/90 border-zinc-800 hover:bg-zinc-800 text-zinc-300'
+                  : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700'
               }`}
               title="Toggle Fullscreen (F)"
             >
@@ -1722,7 +1938,11 @@ export function VideoPlayer({
       {chapters.length > 0 && (
         <div
           id="video-chapters-timeline"
-          className={`p-3.5 sm:p-4 rounded-2xl border flex flex-col gap-3 transition-colors ${
+          className={`w-full ${
+            theaterMode
+              ? 'max-w-[calc((100vh-230px)*16/9)]'
+              : 'max-w-[calc((100vh-250px)*16/9)]'
+          } mx-auto p-3.5 sm:p-4 rounded-2xl border flex flex-col gap-3 transition-colors ${
             isDark
               ? 'bg-[#0c0c0e] border-zinc-800/90 shadow-xl'
               : 'bg-white border-zinc-200 shadow-xs'
@@ -2107,19 +2327,22 @@ export function VideoPlayer({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setTheaterMode(!theaterMode)}
-              className={`hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
-                isDark
-                  ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-800'
-                  : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-600 hover:text-zinc-900 border-zinc-200'
+              onClick={handleToggleTheater}
+              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                theaterMode
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
+                  : isDark
+                  ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
+                  : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
               }`}
+              title="Toggle Theater Mode (T)"
             >
               {theaterMode ? (
                 <Minimize2 className="w-3.5 h-3.5" />
               ) : (
-                <Maximize2 className="w-3.5 h-3.5 text-indigo-500" />
+                <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
               )}
-              <span>{theaterMode ? 'Standard' : 'Theater'}</span>
+              <span>{theaterMode ? 'Standard View' : 'Theater Mode'}</span>
             </button>
 
             <button
@@ -2140,6 +2363,24 @@ export function VideoPlayer({
         >
           <div className="flex items-center gap-2 flex-wrap">
             <span>Shortcuts:</span>
+            <span
+              className={`font-mono border px-1.5 py-0.5 rounded ${
+                isDark
+                  ? 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                  : 'bg-zinc-100 border-zinc-200 text-zinc-600'
+              }`}
+            >
+              [T] Theater
+            </span>
+            <span
+              className={`font-mono border px-1.5 py-0.5 rounded ${
+                isDark
+                  ? 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                  : 'bg-zinc-100 border-zinc-200 text-zinc-600'
+              }`}
+            >
+              [F] Fullscreen
+            </span>
             <span
               className={`font-mono border px-1.5 py-0.5 rounded ${
                 isDark
