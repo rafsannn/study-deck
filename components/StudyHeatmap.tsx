@@ -644,6 +644,8 @@ export function StudyHeatmap({
                           stroke = isDark ? '#6ee7b7' : '#064e3b';
                         }
 
+                        const isHovered = hoveredCell?.dateStr === day.dateStr;
+
                         return (
                           <g key={day.dateStr}>
                             {isToday && (
@@ -657,6 +659,21 @@ export function StudyHeatmap({
                                 fill="none"
                                 stroke={isDark ? '#818cf8' : '#6366f1'}
                                 strokeWidth={1.5}
+                                pointerEvents="none"
+                              />
+                            )}
+                            {isHovered && !isToday && (
+                              <rect
+                                x={colX - 1}
+                                y={rowY - 1}
+                                width={cellSize + 2}
+                                height={cellSize + 2}
+                                rx={3}
+                                ry={3}
+                                fill="none"
+                                stroke={isDark ? '#38bdf8' : '#0284c7'}
+                                strokeWidth={1.4}
+                                pointerEvents="none"
                               />
                             )}
                             <rect
@@ -667,9 +684,9 @@ export function StudyHeatmap({
                               rx={2.5}
                               ry={2.5}
                               fill={fill}
-                              stroke={stroke}
-                              strokeWidth={0.8}
-                              className="cursor-pointer transition-transform hover:scale-125 hover:opacity-90 origin-center"
+                              stroke={isHovered ? (isDark ? '#38bdf8' : '#0284c7') : stroke}
+                              strokeWidth={isHovered ? 1.2 : 0.8}
+                              className="cursor-pointer transition-opacity hover:opacity-85"
                               onClick={() => {
                                 setLogDate(day.dateStr);
                                 setLogMinutes(day.minutes);
@@ -682,7 +699,7 @@ export function StudyHeatmap({
                                 const rect = e.currentTarget.getBoundingClientRect();
                                 setTooltipPos({
                                   x: rect.left + rect.width / 2,
-                                  y: rect.top - 8,
+                                  y: rect.top - 10,
                                 });
                               }}
                               onMouseLeave={() => {
@@ -752,9 +769,10 @@ export function StudyHeatmap({
             top: `${tooltipPos.y}px`,
             transform: 'translate(-50%, -100%)',
             pointerEvents: 'none',
+            userSelect: 'none',
             zIndex: 9999,
           }}
-          className={`p-3 rounded-xl border text-xs shadow-2xl space-y-1.5 min-w-[180px] animate-fade-in ${
+          className={`p-3 rounded-xl border text-xs shadow-2xl space-y-1.5 min-w-[180px] pointer-events-none select-none transition-all duration-75 ${
             isDark
               ? 'bg-zinc-900 border-zinc-700 text-zinc-100 shadow-black/80'
               : 'bg-white border-zinc-300 text-zinc-900 shadow-xl'
