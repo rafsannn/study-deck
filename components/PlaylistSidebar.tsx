@@ -15,6 +15,8 @@ import {
   Plus,
   Layers,
   Clock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { PlaylistCourse, PlaylistItem, VideoWatchProgress } from '@/types/playlist';
 import { calculateCourseDurations, formatDurationHuman, formatTime, parseDurationToSeconds } from '@/lib/utils';
@@ -36,6 +38,7 @@ interface PlaylistSidebarProps {
   onToggleComplete: (videoId: string) => void;
   onMarkAllComplete: () => void;
   onResetCourseProgress: () => void;
+  onTogglePlaylistTracking?: (courseId: string) => void;
   onOpenImportModal?: () => void;
   theme?: 'dark' | 'light';
 }
@@ -53,6 +56,7 @@ export function PlaylistSidebar({
   onToggleComplete,
   onMarkAllComplete,
   onResetCourseProgress,
+  onTogglePlaylistTracking,
   onOpenImportModal,
   theme = 'dark',
 }: PlaylistSidebarProps) {
@@ -349,6 +353,28 @@ export function PlaylistSidebar({
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Reset track progress</span>
                   </button>
+
+                  {onTogglePlaylistTracking && course && (
+                    <button
+                      onClick={() => {
+                        onTogglePlaylistTracking(course.id);
+                        setShowBatchMenu(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-700/40"
+                    >
+                      {course.disabledFromTracking ? (
+                        <>
+                          <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Enable in tracking system</span>
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Disable from tracking system</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -363,7 +389,9 @@ export function PlaylistSidebar({
             }`}
           >
             <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+              className={`h-full rounded-full transition-all duration-300 ${
+                course?.disabledFromTracking ? 'bg-amber-500/70' : 'bg-emerald-500'
+              }`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -382,6 +410,24 @@ export function PlaylistSidebar({
               <span className="text-indigo-400 font-semibold">{formatDurationHuman(courseDurations.remainingSecs)} left</span>
             </div>
           </div>
+
+          {/* Tracking Disabled Status Notice */}
+          {course?.disabledFromTracking && (
+            <div className="mt-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-400 text-xs flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 font-medium text-[11px]">
+                <EyeOff className="w-3.5 h-3.5 shrink-0" />
+                <span>Excluded from tracking system & streaks</span>
+              </span>
+              {onTogglePlaylistTracking && (
+                <button
+                  onClick={() => onTogglePlaylistTracking(course.id)}
+                  className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-semibold transition-colors cursor-pointer shrink-0"
+                >
+                  Enable
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Search & Filter Header */}

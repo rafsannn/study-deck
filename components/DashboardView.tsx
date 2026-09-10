@@ -24,6 +24,8 @@ import {
   Target,
   Calendar,
   TrendingUp,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { PlaylistCourse, UserStudyData, WeeklyStudyGoal } from '@/types/playlist';
 import { calculateCourseDurations, formatDurationHuman, formatTime } from '@/lib/utils';
@@ -38,6 +40,7 @@ interface DashboardViewProps {
   onOpenTargetEstimator?: () => void;
   onDeleteCourse: (courseId: string) => void;
   onResetCourseProgress: (courseId: string) => void;
+  onTogglePlaylistTracking: (courseId: string) => void;
   onUpdateWeeklyGoal?: (goal: WeeklyStudyGoal) => void;
   onLogStudySession?: (date: string, minutes: number, topics: number) => void;
   theme?: 'dark' | 'light';
@@ -54,15 +57,29 @@ export function DashboardView({
   onOpenTargetEstimator,
   onDeleteCourse,
   onResetCourseProgress,
+  onTogglePlaylistTracking,
   onUpdateWeeklyGoal,
   onLogStudySession,
   theme = 'dark',
 }: DashboardViewProps) {
   const isDark = theme === 'dark';
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [playlistFilter, setPlaylistFilter] = useState<'all' | 'tracked' | 'disabled'>('tracked');
 
-  // Overall Statistics Calculation
-  const totalCourses = courses.length;
+  // Tracking System Calculation: Disabled playlists are excluded from overall tracking metrics
+  const disabledIds = new Set(studyData.disabledPlaylistIds || []);
+  const activeTrackedCourses = courses.filter(
+    (c) => !c.disabledFromTracking && !disabledIds.has(c.id)
+  );
+  const disabledCoursesCount = courses.length - activeTrackedCourses.length;
+
+  // Fallback filter if all imported playlists are disabled
+  const effectiveFilter =
+    playlistFilter === 'tracked' && activeTrackedCourses.length === 0 && courses.length > 0
+      ? 'all'
+      : playlistFilter;
+
+  const totalCourses = activeTrackedCourses.length;
   let totalTopics = 0;
   let totalCompletedTopics = 0;
   let totalWatchedSeconds = 0;
@@ -71,7 +88,7 @@ export function DashboardView({
 
   const watchProgressMap = studyData.videoProgress || {};
 
-  courses.forEach((c) => {
+  activeTrackedCourses.forEach((c) => {
     totalTopics += c.items.length;
     const completedSet = new Set(studyData.completedVideos[c.id] || []);
     totalCompletedTopics += completedSet.size;
@@ -104,10 +121,20 @@ export function DashboardView({
 
   const streakDays = studyData.streak?.count || 0;
 
-  // Find recent active item for Quick Resume
-  const resumeCourse = activeCourse || courses[0] || null;
+  // Find recent active item for Quick Resume - strictly from TRACKED courses only
+  // Disabling the playlist acts like it's entirely not there.
+  const isCourseTracked = (c: PlaylistCourse | null | undefined): c is PlaylistCourse =>
+    Boolean(c && !c.disabledFromTracking && !disabledIds.has(c.id));
+
+  const resumeCourse: PlaylistCourse | null =
+    isCourseTracked(activeCourse)
+      ? activeCourse
+      : (activeTrackedCourses.find((c) => c.id === studyData.activePlaylistId) ||
+         activeTrackedCourses[0] ||
+         null);
+
   const resumeVideo =
-    resumeCourse && resumeCourse.items
+    resumeCourse && resumeCourse.items && resumeCourse.items.length > 0
       ? resumeCourse.items.find((i) => i.videoId === studyData.activeVideoId) ||
         resumeCourse.items[0]
       : null;
@@ -145,6 +172,21 @@ export function DashboardView({
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Command Center</span>
               </div>
+              {disabledCoursesCount > 0 && (
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${
+                    isDark
+                      ? 'bg-amber-500/10 border-amber-500/25 text-amber-300'
+                      : 'bg-amber-50 border-amber-200 text-amber-700'
+                  }`}
+                  title={`${disabledCoursesCount} playlist${disabledCoursesCount > 1 ? 's' : ''} excluded from tracking metrics`}
+                >
+                  <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                  <span>
+                    {activeTrackedCourses.length} active • {disabledCoursesCount} excluded
+                  </span>
+                </div>
+              )}
             </div>
             <h2
               className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${
@@ -380,7 +422,7 @@ export function DashboardView({
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>My Playlists ({courses.length})</span>
+            <span>My Playlists ({activeTrackedCourses.length})</span>
           </button>
 
           <button
@@ -533,31 +575,80 @@ export function DashboardView({
       {/* Playlist Library Section */}
       {(activeTab === 'overview' || activeTab === 'playlists') && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-0.5">
               <h3
                 className={`text-lg font-bold tracking-tight ${
                   isDark ? 'text-zinc-100' : 'text-zinc-900'
                 }`}
               >
-                My Playlist Tracks ({courses.length})
+                My Playlist Tracks ({activeTrackedCourses.length})
               </h3>
               <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                Select any playlist track to start learning with embedded playback, timestamp resumption, and topic checklists.
+                Select any playlist track to learn, or toggle tracking to exclude casual playlists from your stats and streaks.
               </p>
             </div>
 
-            <button
-              onClick={onOpenImportModal}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
-                isDark
-                  ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300'
-                  : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-700 shadow-xs'
-              }`}
-            >
-              <Plus className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Add Playlist</span>
-            </button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {courses.length > 0 && (
+                <div
+                  className={`flex items-center p-1 rounded-xl border text-xs font-semibold ${
+                    isDark ? 'bg-zinc-900/90 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                  }`}
+                >
+                  <button
+                    onClick={() => setPlaylistFilter('all')}
+                    className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                      playlistFilter === 'all'
+                        ? isDark
+                          ? 'bg-zinc-800 text-white shadow-xs'
+                          : 'bg-white text-zinc-900 shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    All ({courses.length})
+                  </button>
+                  <button
+                    onClick={() => setPlaylistFilter('tracked')}
+                    className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                      playlistFilter === 'tracked'
+                        ? isDark
+                          ? 'bg-zinc-800 text-emerald-400 shadow-xs'
+                          : 'bg-white text-emerald-600 shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    Tracked ({activeTrackedCourses.length})
+                  </button>
+                  {disabledCoursesCount > 0 && (
+                    <button
+                      onClick={() => setPlaylistFilter('disabled')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                        playlistFilter === 'disabled'
+                          ? isDark
+                            ? 'bg-zinc-800 text-amber-400 shadow-xs'
+                            : 'bg-white text-amber-600 shadow-xs'
+                          : 'text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      Excluded ({disabledCoursesCount})
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={onOpenImportModal}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300'
+                    : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-700 shadow-xs'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Add Playlist</span>
+              </button>
+            </div>
           </div>
 
           {courses.length === 0 ? (
@@ -597,7 +688,17 @@ export function DashboardView({
           ) : (
             /* Grid of Courses */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {courses.map((course) => {
+              {courses
+                .filter((c) => {
+                  const isExcluded = Boolean(c.disabledFromTracking || disabledIds.has(c.id));
+                  if (effectiveFilter === 'tracked') return !isExcluded;
+                  if (effectiveFilter === 'disabled') return isExcluded;
+                  return true;
+                })
+                .map((course) => {
+                const isCourseDisabled = Boolean(
+                  course.disabledFromTracking || disabledIds.has(course.id)
+                );
                 const completedInCourse = (
                   studyData.completedVideos[course.id] || []
                 ).length;
@@ -631,7 +732,11 @@ export function DashboardView({
                   <div
                     key={course.id}
                     className={`flex flex-col rounded-3xl border transition-all duration-300 overflow-hidden group hover:-translate-y-1.5 ${
-                      isActive
+                      isCourseDisabled
+                        ? isDark
+                          ? 'bg-[#0b0b0e]/70 border-amber-900/30 opacity-90 hover:opacity-100 hover:border-amber-700/50'
+                          : 'bg-amber-50/20 border-amber-200/60 hover:border-amber-300'
+                        : isActive
                         ? isDark
                           ? 'bg-[#0f0f14] border-indigo-500/50 ring-1 ring-indigo-500/40 shadow-2xl shadow-indigo-950/40'
                           : 'bg-white border-indigo-300 ring-1 ring-indigo-200 shadow-xl shadow-indigo-100'
@@ -657,8 +762,13 @@ export function DashboardView({
                         unoptimized
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent flex flex-col justify-between p-3.5">
-                        <div className="flex items-center justify-between">
-                          {isActive ? (
+                        <div className="flex items-center justify-between gap-1.5">
+                          {isCourseDisabled ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500 text-zinc-950 font-bold shadow-md">
+                              <EyeOff className="w-3 h-3" />
+                              Excluded from Tracking
+                            </span>
+                          ) : isActive ? (
                             <span className="inline-flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500 text-black font-bold shadow-md">
                               <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
                               Active Track
@@ -685,19 +795,27 @@ export function DashboardView({
                     {/* Card Content Body */}
                     <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-4">
                       <div className="space-y-1.5">
-                        <h4
-                          onClick={() => onSelectCourse(course, getTargetVideoForCourse())}
-                          className={`text-sm font-bold tracking-tight line-clamp-2 cursor-pointer transition-colors ${
-                            isDark
-                              ? 'text-zinc-100 group-hover:text-indigo-300'
-                              : 'text-zinc-900 group-hover:text-indigo-600'
-                          }`}
-                        >
-                          {course.title}
-                        </h4>
+                        <div className="flex items-start justify-between gap-2">
+                          <h4
+                            onClick={() => onSelectCourse(course, getTargetVideoForCourse())}
+                            className={`text-sm font-bold tracking-tight line-clamp-2 cursor-pointer transition-colors ${
+                              isDark
+                                ? 'text-zinc-100 group-hover:text-indigo-300'
+                                : 'text-zinc-900 group-hover:text-indigo-600'
+                            }`}
+                          >
+                            {course.title}
+                          </h4>
+                        </div>
                         <p className="text-xs text-zinc-500 truncate">
                           {course.channelTitle || 'YouTube Creator'}
                         </p>
+                        {isCourseDisabled && (
+                          <div className="pt-1 flex items-center gap-1 text-[11px] text-amber-400 font-medium">
+                            <EyeOff className="w-3 h-3 shrink-0" />
+                            <span>Disabled from overall stats & goals</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Progress Bar & Details */}
@@ -714,7 +832,7 @@ export function DashboardView({
                           >
                             {completedInCourse} / {course.items.length} Completed
                           </span>
-                          <span className="font-mono font-bold text-emerald-400">
+                          <span className={`font-mono font-bold ${isCourseDisabled ? 'text-zinc-400' : 'text-emerald-400'}`}>
                             {courseProgress}%
                           </span>
                         </div>
@@ -725,7 +843,9 @@ export function DashboardView({
                           }`}
                         >
                           <div
-                            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isCourseDisabled ? 'bg-amber-500/70' : 'bg-emerald-500'
+                            }`}
                             style={{ width: `${courseProgress}%` }}
                           />
                         </div>
@@ -755,7 +875,41 @@ export function DashboardView({
                           <ArrowRight className="w-3 h-3" />
                         </button>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
+                          {/* Toggle Tracking Action Button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onTogglePlaylistTracking(course.id);
+                            }}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                              isCourseDisabled
+                                ? isDark
+                                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                                  : 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
+                                : isDark
+                                  ? 'bg-zinc-800/60 border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                                  : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200'
+                            }`}
+                            title={
+                              isCourseDisabled
+                                ? 'Currently excluded from tracking. Click to enable and count towards your tracking system.'
+                                : 'Currently tracked. Click to disable/exclude so it does not affect your tracking system.'
+                            }
+                          >
+                            {isCourseDisabled ? (
+                              <>
+                                <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Excluded</span>
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Tracked</span>
+                              </>
+                            )}
+                          </button>
+
                           <button
                             onClick={() => {
                               onResetCourseProgress(course.id);

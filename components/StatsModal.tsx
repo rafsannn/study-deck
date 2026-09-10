@@ -17,6 +17,7 @@ import {
   Clock,
   Check,
   AlertCircle,
+  EyeOff,
 } from 'lucide-react';
 import { PlaylistCourse, UserStudyData } from '@/types/playlist';
 
@@ -58,20 +59,24 @@ export function StatsModal({
 
   if (!isOpen) return null;
 
-  // Calculate stats
+  // Calculate stats - exclude disabled playlists from tracking system metrics
+  const disabledIds = new Set(studyData.disabledPlaylistIds || []);
+  const activeCourses = courses.filter((c) => !c.disabledFromTracking && !disabledIds.has(c.id));
+  const disabledCoursesCount = courses.length - activeCourses.length;
+
   let totalCompletedLessons = 0;
-  Object.values(studyData.completedVideos).forEach((arr) => {
-    totalCompletedLessons += arr.length;
+  activeCourses.forEach((c) => {
+    totalCompletedLessons += (studyData.completedVideos[c.id] || []).length;
   });
 
   const notesCount = Object.values(studyData.videoNotes).filter((n) => n.trim().length > 0).length;
 
-  // Calculate total watch time across videos
+  // Calculate total watch time across tracked courses
   let totalWatchSeconds = 0;
   let inProgressCount = 0;
   const progressMap = studyData.videoProgress || {};
 
-  courses.forEach((c) => {
+  activeCourses.forEach((c) => {
     const completedSet = new Set(studyData.completedVideos[c.id] || []);
     c.items.forEach((it) => {
       const p = progressMap[it.videoId];
@@ -181,6 +186,22 @@ export function StatsModal({
           </div>
         )}
 
+        {/* Tracking Exclusions Notice */}
+        {disabledCoursesCount > 0 && (
+          <div
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-medium ${
+              isDark
+                ? 'bg-amber-500/10 border-amber-500/25 text-amber-300'
+                : 'bg-amber-50 border-amber-200 text-amber-800'
+            }`}
+          >
+            <EyeOff className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              Tracking active on {activeCourses.length} of {courses.length} playlists ({disabledCoursesCount} excluded from statistics & streaks).
+            </span>
+          </div>
+        )}
+
         {/* Highlight Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div
@@ -272,26 +293,41 @@ export function StatsModal({
               const comp = studyData.completedVideos[c.id]?.length || 0;
               const total = c.items.length;
               const pct = total > 0 ? Math.round((comp / total) * 100) : 0;
+              const isExcluded = Boolean(c.disabledFromTracking || disabledIds.has(c.id));
               return (
                 <div
                   key={c.id}
                   className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 text-xs ${
-                    isDark
+                    isExcluded
+                      ? isDark
+                        ? 'bg-zinc-900/20 border-amber-900/30'
+                        : 'bg-amber-50/40 border-amber-200'
+                      : isDark
                       ? 'bg-zinc-900/40 border-zinc-800/80'
                       : 'bg-zinc-50 border-zinc-200'
                   }`}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold truncate">{c.title}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold truncate">{c.title}</span>
+                      {isExcluded && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 font-medium shrink-0">
+                          <EyeOff className="w-2.5 h-2.5" />
+                          <span>Excluded</span>
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-zinc-500 flex items-center gap-2 mt-0.5">
                       <span>{comp} / {total} Completed</span>
                       <span>•</span>
-                      <span className="font-mono text-emerald-500">{pct}%</span>
+                      <span className={`font-mono ${isExcluded ? 'text-zinc-400' : 'text-emerald-500'}`}>{pct}%</span>
                     </div>
                   </div>
                   <div className="w-20 sm:w-24 bg-zinc-800 h-2 rounded-full overflow-hidden shrink-0">
                     <div
-                      className="bg-emerald-500 h-full rounded-full transition-all"
+                      className={`h-full rounded-full transition-all ${
+                        isExcluded ? 'bg-amber-500/60' : 'bg-emerald-500'
+                      }`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>

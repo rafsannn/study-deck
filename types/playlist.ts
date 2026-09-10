@@ -19,6 +19,7 @@ export interface PlaylistCourse {
   totalVideos: number;
   items: PlaylistItem[];
   isCustom?: boolean;
+  disabledFromTracking?: boolean; // When true, excluded from overall metrics, pace targets, and streak tracking
 }
 
 export interface VideoWatchProgress {
@@ -67,6 +68,8 @@ export interface UserStudyData {
     count: number;
     lastActiveDate: string; // YYYY-MM-DD
   };
+  // Array of playlist IDs disabled / excluded from overall tracking system
+  disabledPlaylistIds?: string[];
   customPlaylists: PlaylistCourse[];
   lastUpdated: string;
 }

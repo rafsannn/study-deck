@@ -13,6 +13,7 @@ import {
   Award,
   BookOpen,
   ArrowRight,
+  EyeOff,
 } from 'lucide-react';
 import { PlaylistCourse, StudyGoal, UserStudyData } from '@/types/playlist';
 import { calculateCourseDurations } from '@/lib/utils';
@@ -72,9 +73,13 @@ export function TargetEstimatorModal({
   let totalDurationSecondsInScope = 0;
   let completedDurationSecondsInScope = 0;
 
+  const disabledIds = new Set(studyData.disabledPlaylistIds || []);
+  const activeCourses = courses.filter((c) => !c.disabledFromTracking && !disabledIds.has(c.id));
+  const disabledCoursesCount = courses.length - activeCourses.length;
+
   const coursesToAnalyze =
     selectedCourseId === 'all'
-      ? courses
+      ? activeCourses
       : courses.filter((c) => c.id === selectedCourseId);
 
   coursesToAnalyze.forEach((course) => {
@@ -189,14 +194,27 @@ export function TargetEstimatorModal({
                 isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200' : 'bg-zinc-100 border-zinc-200 text-zinc-800'
               }`}
             >
-              <option value="all">All Combined Courses ({courses.length})</option>
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title} ({c.items.length} topics)
-                </option>
-              ))}
+              <option value="all">
+                All Tracked Courses ({activeCourses.length}
+                {disabledCoursesCount > 0 ? ` • ${disabledCoursesCount} excluded` : ''})
+              </option>
+              {courses.map((c) => {
+                const isExcluded = Boolean(c.disabledFromTracking || disabledIds.has(c.id));
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.title} ({c.items.length} topics){isExcluded ? ' [Excluded from tracking]' : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
+
+          {selectedCourseId === 'all' && disabledCoursesCount > 0 && (
+            <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-medium">
+              <EyeOff className="w-3.5 h-3.5 shrink-0" />
+              <span>Estimates exclude {disabledCoursesCount} disabled playlist{disabledCoursesCount > 1 ? 's' : ''}</span>
+            </div>
+          )}
 
           {/* Goal Type Selector */}
           <div

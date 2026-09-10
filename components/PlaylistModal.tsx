@@ -15,6 +15,8 @@ import {
   HelpCircle,
   ExternalLink,
   Youtube,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { PlaylistCourse } from '@/types/playlist';
 
@@ -26,6 +28,7 @@ interface PlaylistModalProps {
   activeCourseId?: string;
   onSelectCourse?: (course: PlaylistCourse) => void;
   onDeleteCourse?: (courseId: string) => void;
+  onTogglePlaylistTracking?: (courseId: string) => void;
   theme?: 'dark' | 'light';
 }
 
@@ -37,6 +40,7 @@ export function PlaylistModal({
   activeCourseId = '',
   onSelectCourse,
   onDeleteCourse,
+  onTogglePlaylistTracking,
   theme = 'dark',
 }: PlaylistModalProps) {
   const [inputUrl, setInputUrl] = useState('');
@@ -355,11 +359,41 @@ export function PlaylistModal({
                         </h4>
                         <p className="text-[10px] text-zinc-500 truncate">
                           {c.channelTitle} • {c.items.length} Lectures
+                          {c.disabledFromTracking && ' • Excluded from tracking'}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {onTogglePlaylistTracking && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTogglePlaylistTracking(c.id);
+                          }}
+                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                            c.disabledFromTracking
+                              ? isDark
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                                : 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
+                              : isDark
+                              ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                              : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-900'
+                          }`}
+                          title={
+                            c.disabledFromTracking
+                              ? 'Currently excluded from tracking. Click to include in tracking system.'
+                              : 'Currently tracked. Click to exclude from tracking system.'
+                          }
+                        >
+                          {c.disabledFromTracking ? (
+                            <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                          )}
+                        </button>
+                      )}
+
                       {isActive ? (
                         <span className="text-[10px] font-mono text-emerald-500 font-semibold px-2 py-0.5 rounded bg-emerald-500/10">
                           Active

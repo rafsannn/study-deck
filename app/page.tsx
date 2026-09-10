@@ -35,6 +35,7 @@ const DEFAULT_INITIAL_STUDY_DATA: UserStudyData = {
     count: 0,
     lastActiveDate: '',
   },
+  disabledPlaylistIds: [],
   customPlaylists: [],
   studyGoal: {
     dailyTopics: 2,
@@ -80,6 +81,7 @@ function getStoreSnapshot(): UserStudyData {
           videoProgress: parsed.videoProgress || {},
           videoTags: parsed.videoTags || {},
           streak: parsed.streak || { count: 0, lastActiveDate: '' },
+          disabledPlaylistIds: parsed.disabledPlaylistIds || [],
           customPlaylists: parsed.customPlaylists || [],
           studyGoal: parsed.studyGoal
             ? {
@@ -374,17 +376,32 @@ export default function StudyDeckPage() {
     };
   }, [studyData, persistData]);
 
-  // Compute all available courses (purely user-imported playlists)
+  // Compute all available courses (purely user-imported playlists) with disabled tracking flag
   const allCourses = useMemo(() => {
-    return studyData.customPlaylists || [];
-  }, [studyData.customPlaylists]);
+    const disabledSet = new Set(studyData.disabledPlaylistIds || []);
+    return (studyData.customPlaylists || []).map((course) => ({
+      ...course,
+      disabledFromTracking: Boolean(course.disabledFromTracking || disabledSet.has(course.id)),
+    }));
+  }, [studyData.customPlaylists, studyData.disabledPlaylistIds]);
 
-  // Current active course
+  // Current active course - prioritize active tracked courses so disabled playlists act like they are not there
   const currentCourse = useMemo(() => {
     if (allCourses.length === 0) return null;
+    const disabledSet = new Set(studyData.disabledPlaylistIds || []);
+    const activeTracked = allCourses.filter((c) => !c.disabledFromTracking && !disabledSet.has(c.id));
+
+    // If current activePlaylistId points to an active tracked course, use it
+    const activeFound = activeTracked.find((c) => c.id === studyData.activePlaylistId);
+    if (activeFound) return activeFound;
+
+    // If activePlaylistId is disabled or missing, fallback to the first active tracked course
+    if (activeTracked.length > 0) return activeTracked[0];
+
+    // Fallback if all courses are disabled: allow access to the selected course
     const found = allCourses.find((c) => c.id === studyData.activePlaylistId);
     return found || allCourses[0] || null;
-  }, [allCourses, studyData.activePlaylistId]);
+  }, [allCourses, studyData.activePlaylistId, studyData.disabledPlaylistIds]);
 
   // Current active video item
   const currentVideoIndex = useMemo(() => {
@@ -526,6 +543,11 @@ export default function StudyDeckPage() {
   const handleToggleComplete = useCallback(
     (videoId: string) => {
       if (!currentCourse) return;
+      const isTrackingDisabled = Boolean(
+        currentCourse.disabledFromTracking ||
+        studyData.disabledPlaylistIds?.includes(currentCourse.id)
+      );
+
       const currentList = studyData.completedVideos[currentCourse.id] || [];
       const alreadyDone = currentList.includes(videoId);
 
@@ -533,30 +555,33 @@ export default function StudyDeckPage() {
         ? currentList.filter((id) => id !== videoId)
         : [...currentList, videoId];
 
-      const newStreak = !alreadyDone
+      // If playlist is disabled from tracking, DO NOT affect streaks or daily target tracking
+      const newStreak = (!alreadyDone && !isTrackingDisabled)
         ? updateStreakOnActivity(studyData.streak || { count: 0, lastActiveDate: '' })
         : studyData.streak;
 
-      const todayStr = new Date().toISOString().slice(0, 10);
       let updatedDaily = studyData.dailyActivity || {};
-      const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+      if (!isTrackingDisabled) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
 
-      if (!alreadyDone) {
-        updatedDaily = {
-          ...updatedDaily,
-          [todayStr]: {
-            ...curToday,
-            topics: (curToday.topics || 0) + 1,
-          },
-        };
-      } else {
-        updatedDaily = {
-          ...updatedDaily,
-          [todayStr]: {
-            ...curToday,
-            topics: Math.max(0, (curToday.topics || 1) - 1),
-          },
-        };
+        if (!alreadyDone) {
+          updatedDaily = {
+            ...updatedDaily,
+            [todayStr]: {
+              ...curToday,
+              topics: (curToday.topics || 0) + 1,
+            },
+          };
+        } else {
+          updatedDaily = {
+            ...updatedDaily,
+            [todayStr]: {
+              ...curToday,
+              topics: Math.max(0, (curToday.topics || 1) - 1),
+            },
+          };
+        }
       }
 
       const updated: UserStudyData = {
@@ -585,6 +610,11 @@ export default function StudyDeckPage() {
   const handleCompleteAndNext = useCallback(() => {
     if (!currentCourse || !activeVideo) return;
 
+    const isTrackingDisabled = Boolean(
+      currentCourse.disabledFromTracking ||
+      studyData.disabledPlaylistIds?.includes(currentCourse.id)
+    );
+
     const currentList = studyData.completedVideos[currentCourse.id] || [];
     const isAlreadyDone = currentList.includes(activeVideo.videoId);
     const updatedList = isAlreadyDone
@@ -596,22 +626,25 @@ export default function StudyDeckPage() {
       ? currentCourse.items[currentVideoIndex + 1].videoId
       : activeVideo.videoId;
 
-    const newStreak = !isAlreadyDone
+    // If playlist is disabled from tracking, DO NOT affect streaks or daily target tracking
+    const newStreak = (!isAlreadyDone && !isTrackingDisabled)
       ? updateStreakOnActivity(studyData.streak || { count: 0, lastActiveDate: '' })
       : studyData.streak;
 
-    const todayStr = new Date().toISOString().slice(0, 10);
     let updatedDaily = studyData.dailyActivity || {};
-    const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
+    if (!isTrackingDisabled) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const curToday = updatedDaily[todayStr] || { minutes: 0, seconds: 0, topics: 0 };
 
-    if (!isAlreadyDone) {
-      updatedDaily = {
-        ...updatedDaily,
-        [todayStr]: {
-          ...curToday,
-          topics: (curToday.topics || 0) + 1,
-        },
-      };
+      if (!isAlreadyDone) {
+        updatedDaily = {
+          ...updatedDaily,
+          [todayStr]: {
+            ...curToday,
+            topics: (curToday.topics || 0) + 1,
+          },
+        };
+      }
     }
 
     const updated: UserStudyData = {
@@ -702,9 +735,56 @@ export default function StudyDeckPage() {
       const updated: UserStudyData = {
         ...studyData,
         customPlaylists: remaining,
+        disabledPlaylistIds: (studyData.disabledPlaylistIds || []).filter((id) => id !== courseId),
         activePlaylistId: nextActiveCourse ? nextActiveCourse.id : '',
         activeVideoId: nextActiveCourse?.items[0]?.videoId || '',
         completedVideos: newCompleted,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      persistData(updated);
+    },
+    [studyData, persistData]
+  );
+
+  // Action: Toggle playlist tracking inclusion (enabling/disabling from tracking system)
+  const handleTogglePlaylistTracking = useCallback(
+    (courseId: string) => {
+      const currentDisabled = studyData.disabledPlaylistIds || [];
+      const isCurrentlyDisabled = currentDisabled.includes(courseId);
+      const newDisabledList = isCurrentlyDisabled
+        ? currentDisabled.filter((id) => id !== courseId)
+        : [...currentDisabled, courseId];
+
+      const updatedPlaylists = (studyData.customPlaylists || []).map((c) => {
+        if (c.id === courseId) {
+          return {
+            ...c,
+            disabledFromTracking: !isCurrentlyDisabled,
+          };
+        }
+        return c;
+      });
+
+      // When disabling the active playlist, automatically switch active track to a remaining tracked playlist
+      let nextActivePlaylistId = studyData.activePlaylistId;
+      let nextActiveVideoId = studyData.activeVideoId;
+      if (!isCurrentlyDisabled && studyData.activePlaylistId === courseId) {
+        const remainingTracked = updatedPlaylists.find(
+          (c) => c.id !== courseId && !newDisabledList.includes(c.id)
+        );
+        if (remainingTracked) {
+          nextActivePlaylistId = remainingTracked.id;
+          nextActiveVideoId = remainingTracked.items[0]?.videoId || '';
+        }
+      }
+
+      const updated: UserStudyData = {
+        ...studyData,
+        activePlaylistId: nextActivePlaylistId,
+        activeVideoId: nextActiveVideoId,
+        disabledPlaylistIds: newDisabledList,
+        customPlaylists: updatedPlaylists,
         lastUpdated: new Date().toISOString(),
       };
 
@@ -931,6 +1011,7 @@ export default function StudyDeckPage() {
             onOpenTargetEstimator={() => setIsTargetEstimatorOpen(true)}
             onDeleteCourse={handleDeleteCourse}
             onResetCourseProgress={handleResetCourseProgress}
+            onTogglePlaylistTracking={handleTogglePlaylistTracking}
             onUpdateWeeklyGoal={handleUpdateWeeklyGoal}
             onLogStudySession={handleLogStudySession}
             theme={theme}
@@ -1073,6 +1154,7 @@ export default function StudyDeckPage() {
               onToggleComplete={handleToggleComplete}
               onMarkAllComplete={handleMarkAllComplete}
               onResetCourseProgress={handleResetCourseProgress}
+              onTogglePlaylistTracking={handleTogglePlaylistTracking}
               onOpenImportModal={() => setIsImportModalOpen(true)}
               theme={theme}
             />
@@ -1089,6 +1171,7 @@ export default function StudyDeckPage() {
         activeCourseId={currentCourse?.id || ''}
         onSelectCourse={handleSelectCourse}
         onDeleteCourse={handleDeleteCourse}
+        onTogglePlaylistTracking={handleTogglePlaylistTracking}
         theme={theme}
       />
 
