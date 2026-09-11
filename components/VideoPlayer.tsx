@@ -506,6 +506,31 @@ export function VideoPlayer({
     };
   }, [onStudyTimeLogged]);
 
+  // Continuous study duration logging while video is playing
+  useEffect(() => {
+    if (!isPlayingLive || !video?.videoId) return;
+
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+
+      accumulatedWatchSecondsRef.current += 1;
+      if (accumulatedWatchSecondsRef.current >= 4 && onStudyTimeLogged && video?.videoId) {
+        const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
+        accumulatedWatchSecondsRef.current = 0;
+        onStudyTimeLogged(flushSecs, video.videoId);
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      if (accumulatedWatchSecondsRef.current >= 1 && video?.videoId && onStudyTimeLogged) {
+        const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
+        accumulatedWatchSecondsRef.current = 0;
+        onStudyTimeLogged(flushSecs, video.videoId);
+      }
+    };
+  }, [isPlayingLive, video?.videoId, onStudyTimeLogged]);
+
   // Synchronously reset UI state on video change and capture initial start time
   if (video?.videoId && video.videoId !== prevVideoId) {
     setPrevVideoId(video.videoId);
@@ -748,17 +773,23 @@ export function VideoPlayer({
   useEffect(() => {
     const handleWindowMessage = (e: MessageEvent) => {
       try {
-        if (!e.data || typeof e.data !== 'string') return;
-        if (
-          !e.data.includes('infoDelivery') &&
-          !e.data.includes('initialDelivery') &&
-          !e.data.includes('onStateChange')
-        ) {
+        let data: { event?: string; info?: { currentTime?: number; duration?: number; playerState?: number } } | null = null;
+        if (typeof e.data === 'string') {
+          if (
+            !e.data.includes('infoDelivery') &&
+            !e.data.includes('initialDelivery') &&
+            !e.data.includes('onStateChange')
+          ) {
+            return;
+          }
+          data = JSON.parse(e.data);
+        } else if (typeof e.data === 'object' && e.data !== null) {
+          data = e.data as { event?: string; info?: { currentTime?: number; duration?: number; playerState?: number } };
+        } else {
           return;
         }
 
-        const data = JSON.parse(e.data);
-        if (data.event === 'infoDelivery' && data.info) {
+        if (data && data.event === 'infoDelivery' && data.info) {
           const { currentTime, duration, playerState } = data.info;
 
           if (typeof currentTime === 'number') {
@@ -796,45 +827,17 @@ export function VideoPlayer({
                 lastWatchedAt: new Date().toISOString(),
               });
             }
-
-            // Real-time study duration logging (even for unfinished videos)
-            if (playerState === 1 && video?.videoId) {
-              const prevPlaySec = lastPlaybackSecondRef.current;
-              const nowWall = Date.now();
-              const wallDelta = (nowWall - lastWallTimeRef.current) / 1000;
-
-              if (prevPlaySec !== null && currentVideoIdRef.current === video.videoId) {
-                const playDelta = currentTime - prevPlaySec;
-                // If the user played forward naturally (delta between 0.1s and 8s)
-                if (playDelta > 0.1 && playDelta <= 8 && wallDelta <= 8) {
-                  accumulatedWatchSecondsRef.current += playDelta;
-
-                  // Flush to study log every ~5 seconds of active watch time
-                  if (accumulatedWatchSecondsRef.current >= 5 && onStudyTimeLogged) {
-                    const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
-                    accumulatedWatchSecondsRef.current = 0;
-                    onStudyTimeLogged(flushSecs, video.videoId);
-                  }
-                }
-              }
-              lastPlaybackSecondRef.current = currentTime;
-              lastWallTimeRef.current = nowWall;
-            } else if (playerState === 2 || playerState === 0) {
-              // Paused or ended -> flush any unlogged watch seconds
-              lastPlaybackSecondRef.current = currentTime;
-              lastWallTimeRef.current = Date.now();
-              if (accumulatedWatchSecondsRef.current >= 1 && video?.videoId && onStudyTimeLogged) {
-                const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
-                accumulatedWatchSecondsRef.current = 0;
-                onStudyTimeLogged(flushSecs, video.videoId);
-              }
-            }
           }
 
           if (playerState === 1) {
             setIsPlayingLive(true);
           } else if (playerState === 2 || playerState === 0) {
             setIsPlayingLive(false);
+            if (accumulatedWatchSecondsRef.current >= 1 && video?.videoId && onStudyTimeLogged) {
+              const flushSecs = Math.round(accumulatedWatchSecondsRef.current);
+              accumulatedWatchSecondsRef.current = 0;
+              onStudyTimeLogged(flushSecs, video.videoId);
+            }
             if (playerState === 0 && !isCompleted && video?.videoId) {
               onToggleComplete(video.videoId);
             }
@@ -1192,7 +1195,8 @@ export function VideoPlayer({
 
   const startSec = video?.videoId ? (startSecondsMap[video.videoId] ?? 0) : 0;
   const startParam = startSec > 2 ? `&start=${startSec}` : '';
-  const embedUrl = `https://www.youtube.com/embed/${video.videoId}?enablejsapi=1&autoplay=1&controls=0&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0${startParam}`;
+  const originParam = typeof window !== 'undefined' && window.location.origin ? `&origin=${encodeURIComponent(window.location.origin)}` : '';
+  const embedUrl = `https://www.youtube.com/embed/${video.videoId}?enablejsapi=1&autoplay=1&controls=0&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0${originParam}${startParam}`;
 
   return (
     <div className="flex flex-col gap-2.5 sm:gap-3">
@@ -1294,35 +1298,6 @@ export function VideoPlayer({
                       </div>
                     )}
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {chapters.length > 0 && (
-                    <button
-                      onClick={() => setIsFsChaptersOpen(!isFsChaptersOpen)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border backdrop-blur-md transition-all cursor-pointer ${
-                        isFsChaptersOpen
-                          ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/40'
-                          : 'bg-zinc-900/80 hover:bg-zinc-800/90 border-zinc-700/70 text-zinc-200 hover:text-white'
-                      }`}
-                      title="Toggle Chapters List (C)"
-                    >
-                      <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Chapters</span>
-                      <span className="px-1.5 py-0.5 rounded-full bg-white/10 text-[10px] font-mono">
-                        {chapters.length}
-                      </span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={handleToggleFullscreen}
-                    className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-700/70 text-zinc-200 hover:text-white transition-all cursor-pointer backdrop-blur-md"
-                    title="Exit Fullscreen (Esc or F)"
-                    aria-label="Exit Fullscreen"
-                  >
-                    <Minimize2 className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
 

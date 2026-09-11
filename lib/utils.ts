@@ -62,10 +62,15 @@ export function formatDurationHuman(seconds: number): string {
   if (isNaN(seconds) || seconds <= 0) return '0m';
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
+  const remSecs = Math.floor(seconds % 60);
+
   if (hrs > 0) {
-    return `${hrs}h ${mins}m`;
+    return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
   }
-  return `${mins}m`;
+  if (mins > 0) {
+    return `${mins}m`;
+  }
+  return remSecs > 0 ? `${remSecs}s` : '0m';
 }
 
 export function formatTime(seconds: number): string {

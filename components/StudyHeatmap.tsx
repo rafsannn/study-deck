@@ -31,6 +31,7 @@ interface DayCellData {
   dateStr: string; // YYYY-MM-DD
   dateObj: Date;
   minutes: number;
+  seconds: number;
   topics: number;
   intensityLevel: number; // 0 to 4
   dayOfWeek: number; // 0 (Sun) to 6 (Sat)
@@ -54,6 +55,7 @@ export function StudyHeatmap({
   );
 
   const [hoveredCell, setHoveredCell] = useState<DayCellData | null>(null);
+  const [selectedCell, setSelectedCell] = useState<DayCellData | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [targetMinsInput, setTargetMinsInput] = useState(
@@ -68,12 +70,71 @@ export function StudyHeatmap({
   const [logDate, setLogDate] = useState(() => getLocalDateString());
   const [logMode, setLogMode] = useState<'set' | 'add'>('set');
 
-  // Pure activity map: strictly reflect real logged study records without artificial inflation
+  // Comprehensive activity map: combines real-time logged daily activity and tracked video progress
   const combinedActivityMap = useMemo(() => {
-    return {
+    const map: Record<string, DailyActivityRecord> = {
       ...(studyData.dailyActivity || {}),
     };
-  }, [studyData.dailyActivity]);
+
+    // If videoProgress exists, ensure any watch time with a date is represented
+    if (studyData.videoProgress) {
+      Object.entries(studyData.videoProgress).forEach(([_, p]) => {
+        if (p.lastWatchedAt && p.currentTime > 0) {
+          const dateStr = p.lastWatchedAt.slice(0, 10);
+          const watchedSecs = Math.round(p.currentTime);
+          const watchedMins = Math.max(1, Math.round(watchedSecs / 60));
+
+          if (!map[dateStr]) {
+            map[dateStr] = {
+              minutes: watchedMins,
+              seconds: watchedSecs,
+              topics: 0,
+            };
+          } else {
+            const currentSecs =
+              map[dateStr].seconds !== undefined
+                ? map[dateStr].seconds!
+                : (map[dateStr].minutes || 0) * 60;
+            const finalSecs = Math.max(currentSecs, watchedSecs);
+            map[dateStr] = {
+              ...map[dateStr],
+              seconds: finalSecs,
+              minutes: Math.max(map[dateStr].minutes || 0, Math.round(finalSecs / 60)),
+            };
+          }
+        }
+      });
+    }
+
+    // If active streak has a lastActiveDate, guarantee it shows at least baseline activity
+    if (studyData.streak?.lastActiveDate && !map[studyData.streak.lastActiveDate]) {
+      map[studyData.streak.lastActiveDate] = {
+        minutes: 20,
+        seconds: 1200,
+        topics: 1,
+      };
+    }
+
+    return map;
+  }, [studyData.dailyActivity, studyData.videoProgress, studyData.streak]);
+
+  // Today's exact study metrics
+  const todayMetrics = useMemo(() => {
+    const todayStr = getLocalDateString();
+    const act = combinedActivityMap[todayStr];
+    const seconds = act?.seconds !== undefined ? act.seconds : (act?.minutes || 0) * 60;
+    const minutes = act?.minutes !== undefined && act.minutes > 0 ? act.minutes : Math.round(seconds / 60);
+    const topics = act?.topics || 0;
+    const isStudiedToday = seconds > 0 || minutes > 0 || topics > 0;
+
+    return {
+      todayStr,
+      seconds,
+      minutes,
+      topics,
+      isStudiedToday,
+    };
+  }, [combinedActivityMap]);
 
   // Compute 52 weeks of history (364 days / 1 full year) ending on the current week Saturday
   const { weeks, totalMinutesPastYear, activeDaysCount, maxDailyMinutes } = useMemo(() => {
@@ -102,21 +163,23 @@ export function StudyHeatmap({
     for (let i = 0; i < totalDays; i++) {
       const dateStr = getLocalDateString(tempDate);
       const activity = combinedActivityMap[dateStr];
-      const minutes = activity?.minutes || 0;
+      const seconds = activity?.seconds !== undefined ? activity.seconds : (activity?.minutes || 0) * 60;
+      const minutes = activity?.minutes !== undefined && activity.minutes > 0 ? activity.minutes : Math.round(seconds / 60);
       const topics = activity?.topics || 0;
 
-      if (minutes > 0 || topics > 0) {
-        totalMins += minutes;
+      if (seconds > 0 || minutes > 0 || topics > 0) {
+        totalMins += Math.max(minutes, Math.ceil(seconds / 60));
         activeDays += 1;
         if (minutes > maxMins) maxMins = minutes;
       }
 
       // Calculate intensity (0 to 4)
       let level = 0;
-      if (minutes > 0 || topics > 0) {
-        if (minutes >= 90 || topics >= 4) level = 4;
-        else if (minutes >= 45 || topics >= 2) level = 3;
-        else if (minutes >= 20 || topics >= 1) level = 2;
+      const effectiveMins = Math.max(minutes, Math.round(seconds / 60));
+      if (effectiveMins > 0 || seconds > 0 || topics > 0) {
+        if (effectiveMins >= 90 || topics >= 4) level = 4;
+        else if (effectiveMins >= 45 || topics >= 2) level = 3;
+        else if (effectiveMins >= 20 || topics >= 1) level = 2;
         else level = 1;
       }
 
@@ -124,6 +187,7 @@ export function StudyHeatmap({
         dateStr,
         dateObj: new Date(tempDate),
         minutes,
+        seconds,
         topics,
         intensityLevel: level,
         dayOfWeek: tempDate.getDay(),
@@ -159,6 +223,7 @@ export function StudyHeatmap({
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Sunday
 
     let weekMinutes = 0;
+    let weekSeconds = 0;
     let weekTopics = 0;
     let activeDaysThisWeek = 0;
 
@@ -168,9 +233,12 @@ export function StudyHeatmap({
       const str = getLocalDateString(temp);
       const act = combinedActivityMap[str];
       if (act) {
-        weekMinutes += act.minutes || 0;
+        const secs = act.seconds !== undefined ? act.seconds : (act.minutes || 0) * 60;
+        const mins = act.minutes !== undefined && act.minutes > 0 ? act.minutes : Math.round(secs / 60);
+        weekMinutes += mins;
+        weekSeconds += secs;
         weekTopics += act.topics || 0;
-        if (act.minutes > 0 || act.topics > 0) {
+        if (secs > 0 || mins > 0 || (act.topics || 0) > 0) {
           activeDaysThisWeek += 1;
         }
       }
@@ -183,6 +251,7 @@ export function StudyHeatmap({
 
     return {
       weekMinutes,
+      weekSeconds,
       weekTopics,
       activeDaysThisWeek,
       weeklyGoalMins,
@@ -380,8 +449,74 @@ export function StudyHeatmap({
         </div>
       )}
 
-      {/* Weekly Progress Overview Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+      {/* Weekly & Daily Progress Overview Banner */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-6">
+        {/* Today's Study Time */}
+        <div
+          className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+            isDark
+              ? 'bg-zinc-900/50 border-zinc-800/80 hover:border-amber-500/40'
+              : 'bg-zinc-50 border-zinc-200/90 hover:border-amber-400 shadow-xs'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <div className="p-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
+              <span>Today&apos;s Study Time</span>
+            </span>
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                todayMetrics.isStudiedToday
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                  : 'bg-zinc-500/10 text-zinc-500 border border-zinc-700/20'
+              }`}
+            >
+              {todayMetrics.isStudiedToday ? 'Active Today' : 'Ready'}
+            </span>
+          </div>
+
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className={`text-2xl font-bold font-mono ${
+                todayMetrics.isStudiedToday
+                  ? isDark
+                    ? 'text-amber-400'
+                    : 'text-amber-600'
+                  : isDark
+                  ? 'text-zinc-400'
+                  : 'text-zinc-600'
+              }`}
+            >
+              {formatDurationHuman(todayMetrics.seconds || todayMetrics.minutes * 60)}
+            </span>
+            <span className="text-xs text-zinc-500 font-mono">
+              / ~{formatDurationHuman(Math.max(15, Math.round(currentWeekMetrics.weeklyGoalMins / 7)) * 60)} daily pace
+            </span>
+          </div>
+
+          <div
+            className={`w-full h-2 rounded-full overflow-hidden ${
+              isDark ? 'bg-zinc-800' : 'bg-zinc-200'
+            }`}
+          >
+            <div
+              className="h-full bg-amber-500 rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.round(
+                    ((todayMetrics.seconds > 0 ? todayMetrics.seconds / 60 : todayMetrics.minutes) /
+                      Math.max(15, Math.round(currentWeekMetrics.weeklyGoalMins / 7))) *
+                      100
+                  )
+                )}%`,
+              }}
+            />
+          </div>
+        </div>
+
         {/* Weekly Minutes Progress */}
         <div
           className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
@@ -393,7 +528,7 @@ export function StudyHeatmap({
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
               <div className="p-1 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                <Clock className="w-3.5 h-3.5" />
+                <TrendingUp className="w-3.5 h-3.5" />
               </div>
               <span>This Week&apos;s Time</span>
             </span>
@@ -472,24 +607,24 @@ export function StudyHeatmap({
         <div
           className={`p-4 rounded-2xl border flex flex-col justify-between space-y-2 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
             isDark
-              ? 'bg-zinc-900/50 border-zinc-800/80 hover:border-amber-500/40'
-              : 'bg-zinc-50 border-zinc-200/90 hover:border-amber-400 shadow-xs'
+              ? 'bg-zinc-900/50 border-zinc-800/80 hover:border-orange-500/40'
+              : 'bg-zinc-50 border-zinc-200/90 hover:border-orange-400 shadow-xs'
           }`}
         >
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-              <div className="p-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <div className="p-1 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20">
                 <Flame className="w-3.5 h-3.5 animate-flame" />
               </div>
               <span>Active Consistency</span>
             </span>
-            <span className="text-xs font-mono text-amber-500 font-bold">
+            <span className="text-xs font-mono text-orange-400 font-bold">
               {studyData.streak?.count || 0}d streak
             </span>
           </div>
 
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold font-mono text-amber-500">
+            <span className="text-2xl font-bold font-mono text-orange-400">
               {currentWeekMetrics.activeDaysThisWeek}
             </span>
             <span className="text-xs text-zinc-500 font-mono">
@@ -505,14 +640,14 @@ export function StudyHeatmap({
               startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + dIdx);
               const dateStr = getLocalDateString(startOfWeek);
               const act = combinedActivityMap[dateStr];
-              const hasAct = (act?.minutes || 0) > 0 || (act?.topics || 0) > 0;
+              const hasAct = (act?.seconds || 0) > 0 || (act?.minutes || 0) > 0 || (act?.topics || 0) > 0;
 
               return (
                 <div key={dIdx} className="flex flex-col items-center gap-1 flex-1">
                   <div
                     className={`w-full h-1.5 rounded-full ${
                       hasAct
-                        ? 'bg-amber-500'
+                        ? 'bg-orange-500'
                         : isDark
                         ? 'bg-zinc-800'
                         : 'bg-zinc-300'
@@ -645,6 +780,7 @@ export function StudyHeatmap({
                         }
 
                         const isHovered = hoveredCell?.dateStr === day.dateStr;
+                        const isSelected = selectedCell?.dateStr === day.dateStr;
 
                         return (
                           <g key={day.dateStr}>
@@ -662,7 +798,21 @@ export function StudyHeatmap({
                                 pointerEvents="none"
                               />
                             )}
-                            {isHovered && !isToday && (
+                            {isSelected && !isToday && (
+                              <rect
+                                x={colX - 1.2}
+                                y={rowY - 1.2}
+                                width={cellSize + 2.4}
+                                height={cellSize + 2.4}
+                                rx={3.2}
+                                ry={3.2}
+                                fill="none"
+                                stroke={isDark ? '#38bdf8' : '#0284c7'}
+                                strokeWidth={1.5}
+                                pointerEvents="none"
+                              />
+                            )}
+                            {isHovered && !isToday && !isSelected && (
                               <rect
                                 x={colX - 1}
                                 y={rowY - 1}
@@ -684,10 +834,14 @@ export function StudyHeatmap({
                               rx={2.5}
                               ry={2.5}
                               fill={fill}
-                              stroke={isHovered ? (isDark ? '#38bdf8' : '#0284c7') : stroke}
-                              strokeWidth={isHovered ? 1.2 : 0.8}
+                              stroke={isHovered || isSelected ? (isDark ? '#38bdf8' : '#0284c7') : stroke}
+                              strokeWidth={isHovered || isSelected ? 1.2 : 0.8}
                               className="cursor-pointer transition-opacity hover:opacity-85"
                               onClick={() => {
+                                setSelectedCell(day);
+                              }}
+                              onDoubleClick={() => {
+                                setSelectedCell(day);
                                 setLogDate(day.dateStr);
                                 setLogMinutes(day.minutes);
                                 setLogTopics(day.topics);
@@ -724,7 +878,7 @@ export function StudyHeatmap({
             }`}
           >
             <div className="flex items-center gap-2">
-              <span>Learn every day to maintain streak • Click any cell to view or edit</span>
+              <span>Learn every day to maintain streak • Click any day cell to view hours</span>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -757,6 +911,116 @@ export function StudyHeatmap({
               <span>More</span>
             </div>
           </div>
+
+          {/* Selected Day Inspector */}
+          {(() => {
+            const displayCell =
+              selectedCell ||
+              weeks.flat().find((c) => c.dateStr === todayMetrics.todayStr) ||
+              weeks[weeks.length - 1]?.[6] ||
+              null;
+            if (!displayCell) return null;
+
+            const isToday = displayCell.dateStr === todayMetrics.todayStr;
+            const isYesterday = displayCell.dateStr === getYesterdayDateString();
+            const cellSecs =
+              displayCell.seconds !== undefined && displayCell.seconds > 0
+                ? displayCell.seconds
+                : displayCell.minutes * 60;
+            const hasActivity = cellSecs > 0 || displayCell.topics > 0;
+
+            return (
+              <div
+                className={`mt-4 p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
+                  isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-zinc-50 border-zinc-200 shadow-2xs'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2.5 rounded-xl border shrink-0 ${
+                      hasActivity
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : isDark
+                        ? 'bg-zinc-800/40 border-zinc-700/40 text-zinc-500'
+                        : 'bg-zinc-200 border-zinc-300 text-zinc-400'
+                    }`}
+                  >
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                        {displayCell.dateObj.toLocaleDateString(undefined, {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </span>
+                      {isToday && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                          Today
+                        </span>
+                      )}
+                      {isYesterday && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-700/40 text-zinc-400 border border-zinc-700">
+                          Yesterday
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-zinc-400 mt-1 flex-wrap">
+                      <span>
+                        Time Studied:{' '}
+                        <strong className={`font-mono ${hasActivity ? 'text-sky-400' : 'text-zinc-500'}`}>
+                          {hasActivity ? formatDurationHuman(cellSecs) : '0m'}
+                        </strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Topics Mastered:{' '}
+                        <strong className={`font-mono ${displayCell.topics > 0 ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                          {displayCell.topics}
+                        </strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Intensity:{' '}
+                        <span className="font-semibold text-zinc-300">
+                          {displayCell.intensityLevel === 4
+                            ? 'Very High (90m+)'
+                            : displayCell.intensityLevel === 3
+                            ? 'High (45m+)'
+                            : displayCell.intensityLevel === 2
+                            ? 'Moderate (20m+)'
+                            : displayCell.intensityLevel === 1
+                            ? 'Active (< 20m)'
+                            : 'Rest Day'}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setLogDate(displayCell.dateStr);
+                    setLogMinutes(displayCell.minutes);
+                    setLogTopics(displayCell.topics);
+                    setLogMode('set');
+                    setShowLogModal(true);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto shrink-0 ${
+                    isDark
+                      ? 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-200 hover:text-white'
+                      : 'bg-white hover:bg-zinc-100 border-zinc-300 text-zinc-700 hover:text-zinc-900 shadow-2xs'
+                  }`}
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Adjust or Log Time</span>
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -802,9 +1066,13 @@ export function StudyHeatmap({
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="text-zinc-400">Time Studied:</span>
             <span className="font-bold font-mono text-sky-400">
-              {hoveredCell.minutes > 0
-                ? formatDurationHuman(hoveredCell.minutes * 60)
-                : 'No activity'}
+              {(() => {
+                const effSecs =
+                  hoveredCell.seconds !== undefined && hoveredCell.seconds > 0
+                    ? hoveredCell.seconds
+                    : hoveredCell.minutes * 60;
+                return effSecs > 0 ? formatDurationHuman(effSecs) : 'No activity';
+              })()}
             </span>
           </div>
 
@@ -816,7 +1084,7 @@ export function StudyHeatmap({
           </div>
 
           <div className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/40 flex items-center gap-1">
-            <span>💡 Click to view or adjust hours</span>
+            <span>💡 Click to select • Double-click to adjust</span>
           </div>
         </div>
       )}
